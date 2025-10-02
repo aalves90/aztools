@@ -1262,7 +1262,7 @@ $requiredFunctions = @(
 }
 # --- CRIAcaO DO FORMULaRIO (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "AZTools v2-Gold"
+$form.Text = "AZTools v2. Build02102025"
 $form.Size = New-Object System.Drawing.Size(900, 700) 
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'None'
@@ -1825,3 +1825,4 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+

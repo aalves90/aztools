@@ -1,5 +1,5 @@
 # ===================================================================================
-# Automacões para Windows
+# Automacoes para Windows
 # Criado pensando em facilitar a vida na AZCorp Tech
 # ===================================================================================
 
@@ -538,62 +538,50 @@ function Test-NetConnectionSafe($hostname = "8.8.8.8") {
 }
 
 function Download-File-Robust {
-    param([string]$Url, [string]$OutFile)
-    $webClient = New-Object System.Net.WebClient
-    $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
-    $webClient.DownloadFile($Url, $OutFile)
+    param(
+        [string]$Url, 
+        [string]$OutFile
+    )
+    
+    # Cabeçalhos modernos para simular um navegador real, incluindo o Referer
+    $headers = @{ 
+        "User-Agent"      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        "Accept"          = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+        "Accept-Language" = "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7"
+        # O Referer é a chave: ele informa ao servidor que a requisiçao veio da pagina principal dos wallpapers
+        "Referer"         = "$($script:config.WallpapersUrl)"
+    }
+
+    try {
+        # Usa Invoke-WebRequest, que é mais moderno, com os cabeçalhos e um tempo limite maior
+        Invoke-WebRequest -Uri $Url -Headers $headers -OutFile $OutFile -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+    } catch {
+        # Lança uma exceçao detalhada se o download falhar, para nao haver falhas silenciosas
+        $errorMessage = "Falha no download robusto de '$Url'. Motivo: $($_.Exception.Message.Trim())"
+        Update-Status "ERRO: $errorMessage"
+        throw $errorMessage
+    }
 }
 
 function Get-Image-List-From-Url {
     param([string]$Url)
-    Update-Status "... Usando automacao de navegador para buscar imagens em '$Url'..."
     
-    # Cria uma instância invisível do Internet Explorer
-    $ie = New-Object -ComObject InternetExplorer.Application
-    $ie.Visible = $false
-    
+    Update-Status "... Buscando e analisando a lista de imagens em '$Url'..."
     try {
-        $ie.Navigate($Url)
-
-        # Espera a página carregar COMPLETAMENTE. Este é o passo mais importante.
-        while ($ie.Busy -or $ie.ReadyState -ne 4) {
-            Start-Sleep -Milliseconds 200
-        }
-        
-        # Acessa os links (tags <a>) da página carregada
-        $links = $ie.Document.getElementsByTagName('A')
-        
-        $fileNames = foreach ($link in $links) {
-            $href = $link.href
-            if ($href -match '\.(png|jpg|jpeg|bmp|gif)$') {
-                try { 
-                    # Decodifica o nome do arquivo a partir da URL completa
-                    [System.Web.HttpUtility]::UrlDecode(($href | Split-Path -Leaf))
-                } catch {}
-            }
-        }
-
-        # Filtra quaisquer resultados nulos ou vazios
-        $validFileNames = $fileNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-        
-        if ($validFileNames.Count -eq 0) {
-            Update-Status "AVISO: Nenhum link de imagem foi encontrado no diretorio '$Url' apos a analise."
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
+        $imageLinks = $response.Links | Where-Object { $_.href -match '\.(png|jpg|jpeg|bmp|gif)$' }
+        if ($null -eq $imageLinks) {
+            Update-Status "AVISO: Nenhum link de imagem encontrado no diretorio '$Url'."
             return @()
         }
-
-        Update-Status "... Encontradas $($validFileNames.Count) imagens via automacao de navegador."
-        return $validFileNames
-
+        $fileNames = $imageLinks | ForEach-Object {
+            try { return [System.Web.HttpUtility]::UrlDecode(($_.href | Split-Path -Leaf)) } catch {}
+        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        Update-Status "... Encontradas $($fileNames.Count) imagens."
+        return $fileNames
     } catch {
-        $errorMessage = "Falha critica na automacao do navegador. Motivo: $($_.Exception.Message.Trim())"
-        Update-Status "ERRO: $errorMessage"
-        throw $errorMessage
-    } finally {
-        # Garante que o processo do IE seja encerrado, mesmo que ocorra um erro
-        if ($ie) {
-            $ie.Quit()
-            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($ie) | Out-Null
-        }
+        Update-Status "ERRO: Falha ao buscar a lista de imagens de '$Url'. Motivo: $($_.Exception.Message.Trim())"
+        return @()
     }
 }
 
@@ -1558,6 +1546,7 @@ function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUnins
 function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUninstall = $regUpdatesListView.CheckedItems; if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }; if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }; foreach ($item in $toUninstall) { $appName = $item.SubItems[2].Text; $unStr = $item.Tag; Run-Task "Desinstalar $appName" { if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }; if ($unStr.StartsWith("choco uninstall")) { Start-Process "choco.exe" -ArgumentList "uninstall $($unStr.Split(' ')[-1]) -y" -Wait -WindowStyle Hidden; return }; $cmd = ""; $args = ""; if ($unStr.StartsWith('"')) { $end = $unStr.IndexOf('"', 1); if ($end -ne -1) { $cmd = $unStr.Substring(1, $end - 1); $args = $unStr.Substring($end + 1).Trim() } }; if (-not $cmd) { $parts = $unStr -split ' ', 2; $cmd = $parts[0]; if ($parts.Count -gt 1) { $args = $parts[1] } }; $cmd = $cmd.Replace('"', ''); $silent = ""; if ($cmd -match 'msiexec' -and $args -notmatch '/qn') { $args = $args.Replace("/I", "/X"); $silent = "/qn /norestart" } elseif ($args -notmatch '(/S|/silent|/quiet)') { $silent = "/S" }; $finalArgs = "$args $silent".Trim(); Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -EA Stop } }; Scan-RegistryApps }
 
 function Check-WindowsFeaturesStatus {
+    # --- ETAPA 0: Preparar a UI ---
     $analyzeButton = $null
     foreach($control in $featuresMainPanelGroup.Controls) {
         if ($control -is [System.Windows.Forms.Panel]) {
@@ -1573,77 +1562,92 @@ function Check-WindowsFeaturesStatus {
     $loadingItem = New-Object System.Windows.Forms.ListViewItem("Analisando, por favor aguarde...")
     $loadingItem.ForeColor = [System.Drawing.Color]::Khaki
     $windowsFeaturesListView.Items.Add($loadingItem)
-    Update-Status "Consultando recursos opcionais do Windows. Isso pode levar um momento..."
-
-    # Inicia a busca em um job de fundo
-    $script:featureJob = Start-Job -ScriptBlock {
-        Get-WindowsOptionalFeature -Online -ErrorAction SilentlyContinue | Select-Object DisplayName, FeatureName, State | Sort-Object DisplayName
-    }
-
-    # Configura um timer para verificar o status do job
-    $jobCheckTimer = New-Object System.Windows.Forms.Timer
-    $jobCheckTimer.Interval = 300
-    $jobCheckTimer.add_Tick({
-        param($sender, $e)
+    Update-Status "Iniciando processo externo para analisar os Recursos do Windows..."
+    
+    # --- ETAPA 1: Rodar o comando em um processo separado ---
+    $tempFile = Join-Path $env:TEMP "$(New-Guid).json"
+    
+    # --- ALTERADO: Converte o Status para Texto na Origem usando uma Propriedade Calculada ---
+    $selectExpression = @{Name='State'; Expression={$_.State.ToString()}}
+    $commandToRun = "Get-WindowsOptionalFeature -Online | Select-Object DisplayName, FeatureName, $selectExpression | ConvertTo-Json -Depth 3 | Out-File -FilePath '$tempFile' -Encoding UTF8 -Force"
+    
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = "powershell.exe"
+        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"$commandToRun`""
         
-        if ($script:featureJob -and $script:featureJob.State -eq 'Completed') {
-            $sender.Stop() # Para o timer
-            
-            $results = Receive-Job $script:featureJob
-            Remove-Job $script:featureJob -Force
-            $script:featureJob = $null
+        [System.Windows.Forms.MessageBox]::Show("Uma janela do PowerShell sera aberta para analisar os recursos. Por favor, aguarde a conclusao. A janela fechara automaticamente.", "Analise em Andamento", "OK", "Information")
+        
+        $process = Start-Process -FilePath $psi.FileName -ArgumentList $psi.Arguments -Wait -PassThru
+        
+        if ($process.ExitCode -ne 0) {
+            throw "O processo de analise externo falhou com o código de saida $($process.ExitCode)."
+        }
 
-            $windowsFeaturesListView.BeginUpdate()
-            $windowsFeaturesListView.Items.Clear()
+        # --- ETAPA 2: Ler os resultados do arquivo temporario ---
+        if (-not (Test-Path $tempFile) -or (Get-Item $tempFile).Length -eq 0) {
+            throw "O arquivo de resultados da analise nao foi criado ou esta vazio."
+        }
+        
+        $results = Get-Content -Path $tempFile -Raw | ConvertFrom-Json
+        
+        # --- ETAPA 3: Popular a lista de forma explicita e segura ---
+        $windowsFeaturesListView.BeginUpdate()
+        $windowsFeaturesListView.Items.Clear()
 
-            if ($results) {
-                $script:cachedWindowsFeatures = $results
+        if ($results) {
+            # Se houver apenas um resultado, ConvertFrom-Json pode nao retornar uma coleçao. Normalizamos para uma lista.
+            if ($results -isnot [System.Collections.IEnumerable]) { $results = @($results) }
+
+            $script:cachedWindowsFeatures = $results
+            Update-Status "Analise concluida. Populando a lista com $($results.Count) recursos..."
+
+            foreach ($feature in $script:cachedWindowsFeatures) {
                 
-                $totalFeatures = $results.Count
-                $featuresDone = 0
-                Update-Status "Analise concluida. Populando a lista com $totalFeatures recursos..."
+                # --- REESCRITO: Lógica de criaçao de item para maxima compatibilidade ---
+                $displayName = if ([string]::IsNullOrWhiteSpace($feature.DisplayName)) { "(Nome Indisponivel)" } else { $feature.DisplayName }
+                $statusText = if ([string]::IsNullOrWhiteSpace($feature.State)) { "Desconhecido" } else { $feature.State }
 
-                foreach ($feature in $script:cachedWindowsFeatures) {
-                    $featuresDone++
-                    $percent = [int](($featuresDone / $totalFeatures) * 100)
-                    if ($featuresDone % 10 -eq 0 -or $featuresDone -eq $totalFeatures) {
-                         Update-Status "[$percent%] Carregando: $($feature.DisplayName)"
-                    }
-
-                    # --- CORREÇÃO DEFINITIVA: Cria a linha com os dados de todas as colunas de uma vez ---
-                    $item = New-Object System.Windows.Forms.ListViewItem(@($feature.DisplayName, [string]$feature.State))
-                    
-                    $item.Tag = $feature.FeatureName
-                    
-                    if ($feature.State -eq 'Enabled') {
-                        $item.ForeColor = [System.Drawing.Color]::LightGreen
-                        $item.Checked = $false 
-                    } else {
-                        $item.ForeColor = [System.Drawing.Color]::Salmon
-                    }
-                    $windowsFeaturesListView.Items.Add($item) | Out-Null
+                # 1. Cria o item APENAS com o texto da primeira coluna.
+                $item = New-Object System.Windows.Forms.ListViewItem($displayName)
+                
+                # 2. Adiciona o texto da segunda coluna como um "SubItem".
+                $item.SubItems.Add($statusText) | Out-Null
+                
+                # 3. Define as outras propriedades no objeto ja criado.
+                $item.Tag = $feature.FeatureName
+                
+                # 4. Aplica a cor com base no texto do status (que agora esta correto).
+                if ($statusText -eq 'Enabled') {
+                    $item.ForeColor = [System.Drawing.Color]::LightGreen
+                    $item.Checked = $false 
+                } else {
+                    $item.ForeColor = [System.Drawing.Color]::Salmon
                 }
-                Update-Status "Populacao da lista de Recursos do Windows concluida."
-            } else {
-                Update-Status "AVISO: Nenhuma feature opcional encontrada ou falha ao consultar."
+                
+                # 5. Adiciona o item totalmente construido à lista.
+                $windowsFeaturesListView.Items.Add($item) | Out-Null
             }
+            Update-Status "Lista de Recursos do Windows carregada com sucesso."
+        } else {
+            Update-Status "AVISO: Nenhum recurso opcional foi encontrado após a analise."
+        }
 
-            $windowsFeaturesListView.EndUpdate()
-            $windowsFeaturesListView.AutoResizeColumns(1)
-            if ($analyzeButton) { $analyzeButton.Enabled = $true }
-            
-            $sender.Dispose() # Limpa o timer
+    } catch {
+        Update-Status "ERRO CRiTICO ao analisar Recursos do Windows: $($_.Exception.Message)"
+        $windowsFeaturesListView.Items.Clear()
+        $errorItem = New-Object System.Windows.Forms.ListViewItem("Falha ao carregar recursos. Verifique o log.")
+        $errorItem.ForeColor = [System.Drawing.Color]::Red
+        $windowsFeaturesListView.Items.Add($errorItem)
+    } finally {
+        # --- ETAPA 4: Limpeza ---
+        if (Test-Path $tempFile) {
+            Remove-Item $tempFile -Force
         }
-        elseif ($script:featureJob -and $script:featureJob.State -in ('Failed', 'Stopped')) {
-             $sender.Stop()
-             Update-Status "ERRO CRITICO ao analisar Recursos do Windows."
-             Remove-Job $script:featureJob -Force
-             $script:featureJob = $null
-             if ($analyzeButton) { $analyzeButton.Enabled = $true }
-             $sender.Dispose()
-        }
-    })
-    $jobCheckTimer.Start()
+        $windowsFeaturesListView.EndUpdate()
+        $windowsFeaturesListView.AutoResizeColumns(1)
+        if ($analyzeButton) { $analyzeButton.Enabled = $true }
+    }
 }
 
 function Analyze-Bloatware { $panel = $bloatwarePanel; $panel.AnalyzeButton.Enabled = $false; $panel.CleanButton.Enabled = $false; $panel.Control.Items.Clear(); Run-Task "Verificar Apps Nativos (Winget)" { $upg = @{}; try { $out = winget upgrade --include-unknown --accept-source-agreements; $out | Select-Object -Skip 2 | % { $line = $_ -split '\s{2,}'; if ($line.Count -ge 4) { $id = $line[1].Trim(); $ver = $line[3].Trim(); if (-not [string]::IsNullOrEmpty($id)) { $upg[$id] = $ver } } } } catch {}; $all = $script:config.BloatwareApps; $panel.Control.BeginUpdate(); $i = 1; foreach ($e in $all.GetEnumerator()) { $tech = $e.Name; $friendly = $e.Value.FriendlyName; $wid = $e.Value.WingetId; $app = Get-AppxPackage -AllUsers -Name $tech -EA SilentlyContinue | Select -First 1; $item = New-Object System.Windows.Forms.ListViewItem($i.ToString()); $item.SubItems.Add($friendly) | Out-Null; if ($app) { if ($wid -and $upg.ContainsKey($wid)) { $item.SubItems.Add("Atualizacao Disponivel") | Out-Null; $item.Tag = @{ A = "Upgrade"; W = $wid; P = $app.PackageFullName } } else { $item.SubItems.Add("Instalado") | Out-Null; $item.ForeColor = [System.Drawing.Color]::LightGreen; $item.Tag = @{ A = "Remove"; P = $app.PackageFullName } } } else { $item.SubItems.Add("Nao Encontrado") | Out-Null; $item.ForeColor = [System.Drawing.Color]::DarkGray; if (-not [string]::IsNullOrWhiteSpace($wid)) { $item.Tag = @{ A = "Install"; W = $wid } } else { $item.Tag = @{ A = "None" } } }; $panel.Control.Items.Add($item) | Out-Null; $i++ }; $panel.Control.EndUpdate(); $panel.Control.AutoResizeColumns(1); $panel.CleanButton.Enabled = $true }; $panel.AnalyzeButton.Enabled = $true }

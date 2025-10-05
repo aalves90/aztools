@@ -546,10 +546,11 @@ function Download-File-Robust {
 
 function Get-Image-List-From-Url {
     param([string]$Url)
-    
     Update-Status "... Buscando e analisando a lista de imagens em '$Url'..."
     try {
-        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
+        # ADICIONADO: O cabecalho User-Agent para simular um navegador e evitar o erro 403.
+        $headers = @{ "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36" }
+        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop -Headers $headers
         $imageLinks = $response.Links | Where-Object { $_.href -match '\.(png|jpg|jpeg|bmp|gif)$' }
         if ($null -eq $imageLinks) {
             Update-Status "AVISO: Nenhum link de imagem encontrado no diretorio '$Url'."
@@ -1503,6 +1504,7 @@ function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUnins
 function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUninstall = $regUpdatesListView.CheckedItems; if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }; if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }; foreach ($item in $toUninstall) { $appName = $item.SubItems[2].Text; $unStr = $item.Tag; Run-Task "Desinstalar $appName" { if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }; if ($unStr.StartsWith("choco uninstall")) { Start-Process "choco.exe" -ArgumentList "uninstall $($unStr.Split(' ')[-1]) -y" -Wait -WindowStyle Hidden; return }; $cmd = ""; $args = ""; if ($unStr.StartsWith('"')) { $end = $unStr.IndexOf('"', 1); if ($end -ne -1) { $cmd = $unStr.Substring(1, $end - 1); $args = $unStr.Substring($end + 1).Trim() } }; if (-not $cmd) { $parts = $unStr -split ' ', 2; $cmd = $parts[0]; if ($parts.Count -gt 1) { $args = $parts[1] } }; $cmd = $cmd.Replace('"', ''); $silent = ""; if ($cmd -match 'msiexec' -and $args -notmatch '/qn') { $args = $args.Replace("/I", "/X"); $silent = "/qn /norestart" } elseif ($args -notmatch '(/S|/silent|/quiet)') { $silent = "/S" }; $finalArgs = "$args $silent".Trim(); Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -EA Stop } }; Scan-RegistryApps }
 
 function Check-WindowsFeaturesStatus {
+    # Encontra e desabilita o botao de analise para evitar cliques duplos
     $analyzeButton = $null
     foreach($control in $featuresMainPanelGroup.Controls) {
         if ($control -is [System.Windows.Forms.Panel]) {
@@ -1517,54 +1519,77 @@ function Check-WindowsFeaturesStatus {
     }
     if ($analyzeButton) { $analyzeButton.Enabled = $false }
 
-    Run-Task "Analisar Recursos do Windows" {
-        $form.Invoke([Action]{
-            $windowsFeaturesListView.Items.Clear()
-            $windowsFeaturesListView.BeginUpdate()
-        })
-        
-        $itemsToAdd = [System.Collections.ArrayList]::new()
+    # Limpa a lista e exibe uma mensagem de carregamento
+    $windowsFeaturesListView.Items.Clear()
+    $loadingItem = New-Object System.Windows.Forms.ListViewItem("Analisando, por favor aguarde...")
+    $loadingItem.ForeColor = [System.Drawing.Color]::Khaki
+    $windowsFeaturesListView.Items.Add($loadingItem)
+    Update-Status "Consultando recursos opcionais do Windows. Isso pode levar um momento..."
 
+    # Define o bloco de script que sera executado em segundo plano
+    $sb = {
         try {
-            Update-Status "Consultando recursos opcionais do Windows. Isso pode levar um momento..."
-            $script:cachedWindowsFeatures = Get-WindowsOptionalFeature -Online -ErrorAction Stop | Select-Object DisplayName, FeatureName, State | Sort-Object DisplayName
-            
-            if (-not $script:cachedWindowsFeatures) {
-                Update-Status "AVISO: Nenhuma feature opcional encontrada."
-                return
-            }
-
-            foreach ($feature in $script:cachedWindowsFeatures) {
-                $item = New-Object System.Windows.Forms.ListViewItem($feature.DisplayName)
-                $item.SubItems.Add([string]$feature.State) | Out-Null
-                $item.Tag = $feature.FeatureName # Armazena o nome tecnico para a instalacao
-                
-                if ($feature.State -eq 'Enabled') {
-                    $item.ForeColor = [System.Drawing.Color]::LightGreen
-                    $item.Checked = $false 
-                } else {
-                    $item.ForeColor = [System.Drawing.Color]::Salmon
-                }
-                # A LINHA QUE FALTAVA FOI ADICIONADA AQUI
-                $itemsToAdd.Add($item) | Out-Null
-            }
-        } 
-        catch {
-            Update-Status "ERRO CRITICO ao analisar Recursos do Windows: $($_.Exception.Message)"
-        }
-        finally {
-            $form.Invoke([Action]{
-                if ($itemsToAdd.Count -gt 0) {
-                    $windowsFeaturesListView.Items.AddRange($itemsToAdd)
-                }
-                $windowsFeaturesListView.EndUpdate()
-                $windowsFeaturesListView.AutoResizeColumns(1)
-            })
+            # Retorna a colecao de objetos encontrada
+            return Get-WindowsOptionalFeature -Online -ErrorAction Stop | Select-Object DisplayName, FeatureName, State | Sort-Object DisplayName
+        } catch {
+            # Em caso de erro, retorna a mensagem de erro como uma string
+            return "ERRO: $($_.Exception.Message)"
         }
     }
-    if ($analyzeButton) { $analyzeButton.Enabled = $true }
-}
 
+    # Inicia o trabalho em segundo plano
+    $featureJob = Start-Job -ScriptBlock $sb
+
+    # Cria um timer para verificar a conclusao do trabalho sem congelar a interface
+    $checkTimer = New-Object System.Windows.Forms.Timer
+    $checkTimer.Interval = 500
+    $checkTimer.Add_Tick({
+        param($sender, $e)
+
+        if ($featureJob.State -in @('Completed', 'Failed', 'Stopped')) {
+            # Para e remove o timer assim que o trabalho terminar
+            $checkTimer.Stop()
+            $checkTimer.Dispose()
+
+            # Pega os resultados do trabalho
+            $results = Receive-Job $featureJob
+            Remove-Job $featureJob -Force
+
+            # Atualiza a interface grafica
+            $windowsFeaturesListView.BeginUpdate()
+            $windowsFeaturesListView.Items.Clear()
+
+            if ($results -is [string] -and $results.StartsWith("ERRO:")) {
+                Update-Status "ERRO CRITICO ao analisar Recursos do Windows: $($results.Substring(6))"
+            } elseif ($results) {
+                $script:cachedWindowsFeatures = $results
+                foreach ($feature in $script:cachedWindowsFeatures) {
+                    $item = New-Object System.Windows.Forms.ListViewItem($feature.DisplayName)
+                    $item.SubItems.Add([string]$feature.State) | Out-Null
+                    $item.Tag = $feature.FeatureName
+                    
+                    if ($feature.State -eq 'Enabled') {
+                        $item.ForeColor = [System.Drawing.Color]::LightGreen
+                        $item.Checked = $false 
+                    } else {
+                        $item.ForeColor = [System.Drawing.Color]::Salmon
+                    }
+                    $windowsFeaturesListView.Items.Add($item) | Out-Null
+                }
+                Update-Status "Analise de Recursos do Windows concluida."
+            } else {
+                Update-Status "AVISO: Nenhuma feature opcional encontrada."
+            }
+
+            $windowsFeaturesListView.EndUpdate()
+            $windowsFeaturesListView.AutoResizeColumns(1)
+            
+            # Reabilita o botao de analise
+            if ($analyzeButton) { $analyzeButton.Enabled = $true }
+        }
+    })
+    $checkTimer.Start()
+}
 function Analyze-Bloatware { $panel = $bloatwarePanel; $panel.AnalyzeButton.Enabled = $false; $panel.CleanButton.Enabled = $false; $panel.Control.Items.Clear(); Run-Task "Verificar Apps Nativos (Winget)" { $upg = @{}; try { $out = winget upgrade --include-unknown --accept-source-agreements; $out | Select-Object -Skip 2 | % { $line = $_ -split '\s{2,}'; if ($line.Count -ge 4) { $id = $line[1].Trim(); $ver = $line[3].Trim(); if (-not [string]::IsNullOrEmpty($id)) { $upg[$id] = $ver } } } } catch {}; $all = $script:config.BloatwareApps; $panel.Control.BeginUpdate(); $i = 1; foreach ($e in $all.GetEnumerator()) { $tech = $e.Name; $friendly = $e.Value.FriendlyName; $wid = $e.Value.WingetId; $app = Get-AppxPackage -AllUsers -Name $tech -EA SilentlyContinue | Select -First 1; $item = New-Object System.Windows.Forms.ListViewItem($i.ToString()); $item.SubItems.Add($friendly) | Out-Null; if ($app) { if ($wid -and $upg.ContainsKey($wid)) { $item.SubItems.Add("Atualizacao Disponivel") | Out-Null; $item.Tag = @{ A = "Upgrade"; W = $wid; P = $app.PackageFullName } } else { $item.SubItems.Add("Instalado") | Out-Null; $item.ForeColor = [System.Drawing.Color]::LightGreen; $item.Tag = @{ A = "Remove"; P = $app.PackageFullName } } } else { $item.SubItems.Add("Nao Encontrado") | Out-Null; $item.ForeColor = [System.Drawing.Color]::DarkGray; if (-not [string]::IsNullOrWhiteSpace($wid)) { $item.Tag = @{ A = "Install"; W = $wid } } else { $item.Tag = @{ A = "None" } } }; $panel.Control.Items.Add($item) | Out-Null; $i++ }; $panel.Control.EndUpdate(); $panel.Control.AutoResizeColumns(1); $panel.CleanButton.Enabled = $true }; $panel.AnalyzeButton.Enabled = $true }
 
 function Apply-BloatwareActions { $panel = $bloatwarePanel; $panel.CleanButton.Enabled = $false; $items = $panel.Control.CheckedItems; if ($items.Count -eq 0) { $panel.AnalyzeButton.Enabled = $true; return }; if (-not (Confirm-Action "Aplicar acoes em $($items.Count) apps?")) { $panel.AnalyzeButton.Enabled = $true; $panel.CleanButton.Enabled = $true; return }; Run-Task "Aplicar Acoes nos Apps Nativos" { foreach ($item in $items) { $info = $item.Tag; $name = $item.SubItems[1].Text; $action = $info.A; try { switch ($action) { "Remove" { Remove-AppxPackage -Package $info.P -AllUsers -EA Stop } "Install" { $args = "install --id $($info.W) -e --silent --force --disable-interactivity --accept-package-agreements --accept-source-agreements"; Start-Process winget.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden } "Upgrade" { $args = "upgrade --id $($info.W) -e --silent --force --disable-interactivity --accept-package-agreements --accept-source-agreements --include-unknown"; Start-Process winget.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden } } } catch {}; Start-Sleep -Seconds 2 } }; Analyze-Bloatware; $panel.AnalyzeButton.Enabled = $true }
@@ -1944,7 +1969,7 @@ $featuresContainerPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle(
 $featuresContainerPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100)))
 
 $featuresInfoLabel = New-Object System.Windows.Forms.Label
-$featuresInfoLabel.Text = "Nota: A instalacao de recursos depende da saude do sistema. Em caso de erros, utilize as tarefas de reparo neste na aba Sistemas Manutencao."
+$featuresInfoLabel.Text = "Nota: A instalacao de recursos depende da saude do sistema. Em caso de erros, utilize as tarefas de reparo neste na aba Sistemas e Manutencao."
 $featuresInfoLabel.Dock = "Top"; $featuresInfoLabel.AutoSize = $true; $featuresInfoLabel.Padding = New-Object System.Windows.Forms.Padding(5); $featuresInfoLabel.ForeColor = [System.Drawing.Color]::Khaki
 $featuresContainerPanel.Controls.Add($featuresInfoLabel, 0, 0)
 

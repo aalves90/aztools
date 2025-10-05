@@ -1521,6 +1521,8 @@ function Check-WindowsFeaturesStatus {
             $windowsFeaturesListView.BeginUpdate()
         })
         
+        $itemsToAdd = [System.Collections.ArrayList]::new()
+
         try {
             Update-Status "Consultando recursos opcionais do Windows. Isso pode levar um momento..."
             $script:cachedWindowsFeatures = Get-WindowsOptionalFeature -Online -ErrorAction Stop | Select-Object DisplayName, FeatureName, State | Sort-Object DisplayName
@@ -1541,6 +1543,7 @@ function Check-WindowsFeaturesStatus {
                 } else {
                     $item.ForeColor = [System.Drawing.Color]::Salmon
                 }
+                $itemsToAdd.Add($item) | Out-Null
             }
         } 
         catch {
@@ -1548,6 +1551,9 @@ function Check-WindowsFeaturesStatus {
         }
         finally {
             $form.Invoke([Action]{
+                if ($itemsToAdd.Count -gt 0) {
+                    $windowsFeaturesListView.Items.AddRange($itemsToAdd)
+                }
                 $windowsFeaturesListView.EndUpdate()
                 $windowsFeaturesListView.AutoResizeColumns(1)
             })
@@ -1935,7 +1941,7 @@ $featuresContainerPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle(
 $featuresContainerPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100)))
 
 $featuresInfoLabel = New-Object System.Windows.Forms.Label
-$featuresInfoLabel.Text = "Nota: A instalacao de recursos depende da saude do sistema. Em caso de erros, utilize as tarefas de reparo neste mesmo quadro."
+$featuresInfoLabel.Text = "Nota: A instalacao de recursos depende da saude do sistema. Em caso de erros, utilize as tarefas de reparo neste na aba "Sistemas Manutencao"."
 $featuresInfoLabel.Dock = "Top"; $featuresInfoLabel.AutoSize = $true; $featuresInfoLabel.Padding = New-Object System.Windows.Forms.Padding(5); $featuresInfoLabel.ForeColor = [System.Drawing.Color]::Khaki
 $featuresContainerPanel.Controls.Add($featuresInfoLabel, 0, 0)
 

@@ -1941,7 +1941,7 @@ $featuresContainerPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle(
 $featuresContainerPanel.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::Percent, 100)))
 
 $featuresInfoLabel = New-Object System.Windows.Forms.Label
-$featuresInfoLabel.Text = "Nota: A instalacao de recursos depende da saude do sistema. Em caso de erros, utilize as tarefas de reparo neste na aba "Sistemas Manutencao"."
+$featuresInfoLabel.Text = "Nota: A instalacao de recursos depende da saude do sistema. Em caso de erros, utilize as tarefas de reparo neste na aba Sistemas Manutencao."
 $featuresInfoLabel.Dock = "Top"; $featuresInfoLabel.AutoSize = $true; $featuresInfoLabel.Padding = New-Object System.Windows.Forms.Padding(5); $featuresInfoLabel.ForeColor = [System.Drawing.Color]::Khaki
 $featuresContainerPanel.Controls.Add($featuresInfoLabel, 0, 0)
 

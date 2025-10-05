@@ -1541,7 +1541,6 @@ function Check-WindowsFeaturesStatus {
                 } else {
                     $item.ForeColor = [System.Drawing.Color]::Salmon
                 }
-                $form.Invoke([Action]{ $windowsFeaturesListView.Items.Add($item) | Out-Null })
             }
         } 
         catch {
@@ -1697,7 +1696,7 @@ function Start-Execution {
                     $maintenanceCheckedListBox.CheckedItems | ForEach-Object { $tasksToProcess.Add(@{ Name = $_; Definition = $maintenanceTasks[$_] }) | Out-Null }
                 }
                 "(ALPHA) Recursos do Windows" {
-foreach ($item in $windowsFeaturesListView.CheckedItems) {
+						foreach ($item in $windowsFeaturesListView.CheckedItems) {
                         # A logica agora pega o nome tecnico do Tag do item
                         $featureName = $item.Tag
                         $displayName = $item.Text
@@ -1705,8 +1704,8 @@ foreach ($item in $windowsFeaturesListView.CheckedItems) {
                         if ($currentStatus -ne 'Enabled') {
                             $actionBlock = [scriptblock]::Create("
                                 Enable-WindowsOptionalFeature -Online -FeatureName '$featureName' -All -NoRestart -Verbose -ErrorAction Stop
-                                $status = Get-WindowsOptionalFeature -Online -FeatureName '$featureName'
-                                if (\$status.RestartNeeded) { \$script:rebootRequired = \$true }")
+                                `$status = Get-WindowsOptionalFeature -Online -FeatureName '$featureName'
+                                if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }")
                             $tasksToProcess.Add(@{ Name = "Habilitando Recurso: $displayName"; Definition = $actionBlock }) | Out-Null
                         }
                     }
@@ -2018,7 +2017,7 @@ $endpointSecurityTabPage.Controls.Add($endpointContainerPanel)
 # CRIA O LABEL DE AVISO
 $endpointInfoLabel = New-Object System.Windows.Forms.Label
 $endpointInfoLabel.Text = "Nota: A instalacao requer que a pagina de download do agente seja aberta no navegador. Siga as instrucoes que aparecerao na tela.
-Se não souber qual versão instalar, pergunte ao System Team"
+Se nao souber qual versao instalar, pergunte ao System Team"
 $endpointInfoLabel.Dock = "Top"
 $endpointInfoLabel.AutoSize = $true
 $endpointInfoLabel.Padding = New-Object System.Windows.Forms.Padding(5)
@@ -2179,13 +2178,9 @@ $maintenanceTasks.Keys | ForEach-Object { $maintenanceCheckedListBox.Items.Add($
 $personalizationTasks.Keys | ForEach-Object { $personalizationCheckedListBox.Items.Add($_, $false) }
 Populate-AppsTreeView
 $debloatTasks.Keys | ForEach-Object { $debloatCheckedListBox.Items.Add($_, $false) }
-$windowsFeaturesTasks.Keys | ForEach-Object { 
-    $item = New-Object System.Windows.Forms.ListViewItem($_)
-    $item.SubItems.Add("...") | Out-Null
-    $windowsFeaturesListView.Items.Add($item) | Out-Null 
-}
 $endpointSecurityTasks.Keys | ForEach-Object { $endpointSecurityCheckedListBox.Items.Add($_, $false) }
 Add-ListViewColumns $bloatwarePanel.Control @("(#)", "Nome", "Status")
+
 
 # --- Associacao de Eventos ---
 

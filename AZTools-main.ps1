@@ -1500,6 +1500,8 @@ function Scan-RegistryApps { $scanRegButton.Enabled = $false; $searchForUpdateBu
 
 function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUninstall = $regUpdatesListView.CheckedItems; if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }; if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }; foreach ($item in $toUninstall) { $appName = $item.SubItems[2].Text; $unStr = $item.Tag; Run-Task "Desinstalar $appName" { if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }; if ($unStr.StartsWith("choco uninstall")) { Start-Process "choco.exe" -ArgumentList "uninstall $($unStr.Split(' ')[-1]) -y" -Wait -WindowStyle Hidden; return }; $cmd = ""; $args = ""; if ($unStr.StartsWith('"')) { $end = $unStr.IndexOf('"', 1); if ($end -ne -1) { $cmd = $unStr.Substring(1, $end - 1); $args = $unStr.Substring($end + 1).Trim() } }; if (-not $cmd) { $parts = $unStr -split ' ', 2; $cmd = $parts[0]; if ($parts.Count -gt 1) { $args = $parts[1] } }; $cmd = $cmd.Replace('"', ''); $silent = ""; if ($cmd -match 'msiexec' -and $args -notmatch '/qn') { $args = $args.Replace("/I", "/X"); $silent = "/qn /norestart" } elseif ($args -notmatch '(/S|/silent|/quiet)') { $silent = "/S" }; $finalArgs = "$args $silent".Trim(); Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -EA Stop } }; Scan-RegistryApps }
 
+function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUninstall = $regUpdatesListView.CheckedItems; if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }; if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }; foreach ($item in $toUninstall) { $appName = $item.SubItems[2].Text; $unStr = $item.Tag; Run-Task "Desinstalar $appName" { if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }; if ($unStr.StartsWith("choco uninstall")) { Start-Process "choco.exe" -ArgumentList "uninstall $($unStr.Split(' ')[-1]) -y" -Wait -WindowStyle Hidden; return }; $cmd = ""; $args = ""; if ($unStr.StartsWith('"')) { $end = $unStr.IndexOf('"', 1); if ($end -ne -1) { $cmd = $unStr.Substring(1, $end - 1); $args = $unStr.Substring($end + 1).Trim() } }; if (-not $cmd) { $parts = $unStr -split ' ', 2; $cmd = $parts[0]; if ($parts.Count -gt 1) { $args = $parts[1] } }; $cmd = $cmd.Replace('"', ''); $silent = ""; if ($cmd -match 'msiexec' -and $args -notmatch '/qn') { $args = $args.Replace("/I", "/X"); $silent = "/qn /norestart" } elseif ($args -notmatch '(/S|/silent|/quiet)') { $silent = "/S" }; $finalArgs = "$args $silent".Trim(); Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -EA Stop } }; Scan-RegistryApps }
+
 function Check-WindowsFeaturesStatus {
     $analyzeButton = $null
     foreach($control in $featuresMainPanelGroup.Controls) {
@@ -1543,6 +1545,7 @@ function Check-WindowsFeaturesStatus {
                 } else {
                     $item.ForeColor = [System.Drawing.Color]::Salmon
                 }
+                # A LINHA QUE FALTAVA FOI ADICIONADA AQUI
                 $itemsToAdd.Add($item) | Out-Null
             }
         } 

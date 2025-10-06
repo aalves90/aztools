@@ -585,7 +585,7 @@ function Get-Image-List-From-Url {
 
         # Usa Regex para encontrar todos os links que terminam com extensoes de imagem
         # Esta expressao captura o nome do arquivo dentro do atributo href
-        $regex = [regex] 'href="([^"]+\.(png|jpg|jpeg|bmp|gif))"'
+        $regex = [regex] 'href="([^"]+\.(png|jpg|jpeg|bmp|gif|webp))"'
         $matches = $regex.Matches($htmlContent)
 
         # Extrai apenas os nomes dos arquivos dos links encontrados
@@ -803,7 +803,13 @@ function Configure-System-Wallpaper {
     Update-Status "--> Verificando conexao com a internet..."
     Test-NetConnectionSafe
     
-    # 1. Cria uma pasta temporaria para as miniaturas que sera limpa no final.
+    # Define um local permanente para os wallpapers na pasta de Imagens do usuario
+    $permanentWpPath = Join-Path ([Environment]::GetFolderPath('MyPictures')) "AZCorp Wallpapers"
+    # Garante que a pasta exista
+    if (-not (Test-Path $permanentWpPath)) {
+        New-Item -Path $permanentWpPath -ItemType Directory -Force | Out-Null
+    }
+    
     $tempThumbDir = Join-Path $env:TEMP "WallpaperThumbs_$(Get-Random)"
     New-Item -Path $tempThumbDir -ItemType Directory -Force | Out-Null
     
@@ -811,51 +817,44 @@ function Configure-System-Wallpaper {
         $imageLinks = Get-Image-List-From-Url -Url $script:config.WallpapersUrl
         if ($imageLinks.Count -eq 0) { throw "Nenhum wallpaper foi encontrado no diretorio online." }
         
-        # 2. Prepara a janela de selecao.
-        $selectionForm = New-Object System.Windows.Forms.Form
-        $selectionForm.Text = "Selecione o Wallpaper Padrao"
-        $selectionForm.Size = New-Object System.Drawing.Size(640, 520)
-        $selectionForm.StartPosition = "CenterParent"
-        
+        $selectionForm = New-Object System.Windows.Forms.Form; $selectionForm.Text = "Selecione o Wallpaper (Clique na Imagem)"; $selectionForm.Size = New-Object System.Drawing.Size(640, 520); $selectionForm.StartPosition = "CenterParent"
         $flowLayoutPanel = New-Object System.Windows.Forms.FlowLayoutPanel; $flowLayoutPanel.Dock = "Fill"; $flowLayoutPanel.AutoScroll = $true
         $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Aplicar Wallpaper Selecionado"; $okButton.Dock = "Bottom"
         
-        $radioButtons = @()
+        $script:selectedWallpaperGroup = $null
         
-        # 3. Loop para baixar e exibir cada miniatura.
         foreach ($imageFile in $imageLinks) { 
             if ([string]::IsNullOrWhiteSpace($imageFile)) { continue }
-            
             $filename = $imageFile | Split-Path -Leaf
             $imageUrl = "$($script:config.WallpapersUrl.TrimEnd('/'))/$([System.Web.HttpUtility]::UrlPathEncode($filename))"
             $thumbPath = Join-Path $tempThumbDir $filename
-            
             try {
                 Download-File-Robust -Url $imageUrl -OutFile $thumbPath -RefererUrl $script:config.WallpapersUrl
-                
                 $imageBytes = [System.IO.File]::ReadAllBytes($thumbPath)
                 $memoryStream = [System.IO.MemoryStream]::new($imageBytes)
+                $groupBox = New-Object System.Windows.Forms.GroupBox; $groupBox.Size = New-Object System.Drawing.Size(180, 140); $groupBox.Tag = $filename; $groupBox.Text = ($filename -replace '\.(png|jpg|jpeg|bmp|gif|webp)$', '') -replace '[-_]', ' '
+                $pictureBox = New-Object System.Windows.Forms.PictureBox; $pictureBox.Dock = "Fill"; $pictureBox.SizeMode = "Zoom"; $pictureBox.Image = [System.Drawing.Image]::FromStream($memoryStream)
                 
-                $groupBox = New-Object System.Windows.Forms.GroupBox; $groupBox.Size = New-Object System.Drawing.Size(180, 140)
-                $pictureBox = New-Object System.Windows.Forms.PictureBox; $pictureBox.Dock = "Fill"; $pictureBox.SizeMode = "Zoom"
-                $pictureBox.Image = [System.Drawing.Image]::FromStream($memoryStream)
+                $onClick = {
+                    param($sender, $e)
+                    $clickedControl = $sender
+                    $clickedGroup = if ($clickedControl -is [System.Windows.Forms.GroupBox]) { $clickedControl } else { $clickedControl.Parent }
+                    if ($script:selectedWallpaperGroup) { $script:selectedWallpaperGroup.ForeColor = $script:themeColors.Foreground }
+                    $clickedGroup.ForeColor = $script:themeColors.Accent
+                    $script:selectedWallpaperGroup = $clickedGroup
+                }
                 
-                $friendlyName = ($filename -replace '\.(png|jpg|jpeg|bmp|gif|webp)$', '') -replace '[-_]', ' '
-                $radioButton = New-Object System.Windows.Forms.RadioButton; $radioButton.Text = $friendlyName; $radioButton.Dock = "Bottom"; $radioButton.Tag = $filename # A Tag agora e so o nome do arquivo.
-                $radioButtons += $radioButton
-                $groupBox.Controls.AddRange(@($pictureBox, $radioButton))
-                $flowLayoutPanel.Controls.Add($groupBox) 
-
+                $groupBox.Add_Click($onClick); $pictureBox.Add_Click($onClick)
+                $groupBox.Controls.Add($pictureBox); $flowLayoutPanel.Controls.Add($groupBox) 
             } catch {
                 Update-Status "AVISO: Falha ao carregar a miniatura para '$filename'. Pulando..."
                 continue
             }
         }
         
-        # 4. Exibe a janela de selecao para o usuario.
-        if ($radioButtons.Count -eq 0) { throw "Nenhuma imagem pode ser carregada para selecao." }
+        if ($flowLayoutPanel.Controls.Count -eq 0) { throw "Nenhuma imagem pode ser carregada para selecao." }
         
-        $radioButtons[0].Checked = $true
+        $firstGroup = $flowLayoutPanel.Controls[0]; $firstGroup.ForeColor = $script:themeColors.Accent; $script:selectedWallpaperGroup = $firstGroup
         $okButton.Add_Click({ $selectionForm.DialogResult = [System.Windows.Forms.DialogResult]::OK; $selectionForm.Close() })
         $selectionForm.Controls.AddRange(@($flowLayoutPanel, $okButton))
         $result = $selectionForm.ShowDialog()
@@ -863,29 +862,41 @@ function Configure-System-Wallpaper {
         
         if ($result -ne [System.Windows.Forms.DialogResult]::OK) { return "CANCELADO" }
         
-        # 5. Aplica o wallpaper selecionado.
-        $selectedFilename = ($radioButtons | Where-Object { $_.Checked }).Tag
+        $selectedFilename = $script:selectedWallpaperGroup.Tag
         if (-not $selectedFilename) { return "CANCELADO" }
         
         Update-Status "--> Aplicando o wallpaper selecionado..."
         $finalImageUrl = "$($script:config.WallpapersUrl.TrimEnd('/'))/$([System.Web.HttpUtility]::UrlPathEncode($selectedFilename))"
-        $finalWallpaperPath = Join-Path $env:TEMP $selectedFilename
         
-        Download-File-Robust -Url $finalImageUrl -OutFile $finalWallpaperPath -RefererUrl $script:config.WallpapersUrl    
-        [Wallpaper]::SystemParametersInfo(20, 0, $finalWallpaperPath, 3) | Out-Null
+        # O caminho de download agora e a pasta permanente
+        $downloadedImagePath = Join-Path $permanentWpPath $selectedFilename
         
-        # Limpa o arquivo final do wallpaper da pasta Temp
-        if (Test-Path $finalWallpaperPath) { Remove-Item -Path $finalWallpaperPath -Force -ErrorAction SilentlyContinue }
+        Download-File-Robust -Url $finalImageUrl -OutFile $downloadedImagePath -RefererUrl $script:config.WallpapersUrl
+        $bmpPath = [System.IO.Path]::ChangeExtension($downloadedImagePath, ".bmp")
+        
+        $image = [System.Drawing.Image]::FromFile($downloadedImagePath)
+        $image.Save($bmpPath, [System.Drawing.Imaging.ImageFormat]::Bmp)
+        $image.Dispose()
+
+        # Agora usamos o caminho PERMANENTE do arquivo BMP
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $bmpPath
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value 2
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value 0
+        
+        RUNDLL32.EXE USER32.DLL,UpdatePerUserSystemParameters 1, True
+        
+        # Remove apenas o arquivo de download original (ex: .png), mantem o .bmp que esta em uso.
+        if (Test-Path $downloadedImagePath) { Remove-Item -Path $downloadedImagePath -Force -ErrorAction SilentlyContinue }
+        
         Update-Status "--> Wallpaper atualizado com sucesso!"
 
     } finally {
-        # 6. Limpeza final: Garante que a pasta de miniaturas seja sempre apagada.
+        # A limpeza final agora so apaga a pasta de miniaturas.
         if (Test-Path $tempThumbDir) {
             Remove-Item -Path $tempThumbDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
 }
-
 function Configure-Teams-Backgrounds {
     Test-NetConnectionSafe
     Stop-Process-AndWait -processName "msteams"; Stop-Process-AndWait -processName "ms-teams"
@@ -1950,7 +1961,7 @@ function Start-Execution {
     $script:progressTimer.Start()
 }
 
-# --- CRIAcaO DO FORMULario (continuacao) ---
+# --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AZTools 2 || Build 05102025.1"
 $form.Size = New-Object System.Drawing.Size(900, 700) 
@@ -2307,117 +2318,11 @@ $endpointSecurityTasks.Keys | ForEach-Object { $endpointSecurityCheckedListBox.I
 Add-ListViewColumns $bloatwarePanel.Control @("(#)", "Nome", "Status")
 
 
-# --- Associacao de Eventos ---
+# #############################################################################
+# ####### INICIO DA ASSOCIACAO DE EVENTOS #######
+# #############################################################################
 
-$script:progressTimer.Add_Tick({
-    if (-not $script:executionJob) {
-        $script:progressTimer.Stop()
-        return
-    }
-
-    $messages = Receive-Job $script:executionJob
-    if ($messages) {
-        foreach ($msg in $messages) {
-            if ($msg -isnot [string]) { continue }
-            
-            # CORRECAO: A logica agora envia o progresso como uma mensagem de log normal
-            if ($msg.StartsWith("PROGRESS:")) {
-                $parts = $msg.Split(":")
-                $percent = [int]$parts[1]; $taskName = $parts[2]
-                Update-Status "[$percent%] Executando: $taskName..."
-                if ($script:loadingOverlay -and $script:loadingOverlay.IsHandleCreated) {
-                    $script:loadingOverlay.Controls[0].Text = "Executando: $taskName..."
-                }
-            }
-            elseif ($msg.StartsWith("LOG:")) {
-                Update-Status $msg.Substring(4)
-            }
-        }
-    }
-
-    if ($script:executionJob.State -in @('Completed', 'Failed', 'Stopped')) {
-        $script:progressTimer.Stop()
-        $allFinalOutput = (Get-Job -Id $script:executionJob.Id).ChildJobs[0].Output
-        $finalMessage = $allFinalOutput | Where-Object { $_ -like "COMPLETE:*" } | Select-Object -Last 1
-        $anyTaskFailed = $false
-        if ($finalMessage -and ($finalMessage.ToString().Split(":")[1] -eq 'True')) {
-            $anyTaskFailed = $true
-        }
-        $rebootMessage = $allFinalOutput | Where-Object { $_ -like "REBOOT_REQUIRED:*" } | Select-Object -Last 1
-        if ($rebootMessage -and ($rebootMessage.ToString().Split(":")[1] -eq 'True')) {
-            $script:rebootRequired = $true
-        }
-
-        if ($script:loadingOverlay -and $script:loadingOverlay.IsHandleCreated) {
-            $script:loadingOverlay.Close(); $script:loadingOverlay.Dispose()
-        }
-        $script:controlsToToggle.ForEach({ if ($_.IsHandleCreated) { $_.Enabled = $true } })
-
-		if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
-
-        if ($script:dismRepairSuggested) {
-            [System.Windows.Forms.MessageBox]::Show("O Windows nao encontrou os arquivos para instalar/alterar um ou mais recursos.`n`nRecomenda-se executar 'Reparar Imagem do Windows (DISM)' e 'Verificar Integridade do Sistema (SFC)'.", "Sugestao de Reparo", "OK", "Information")
-        }
-        if ($script:rebootRequired) {
-            [System.Windows.Forms.MessageBox]::Show("Uma ou mais tarefas requerem que o computador seja reiniciado para aplicar as alteracoes.", "Reinicializacao Necessaria", "OK", "Warning")
-        }
-		Update-Status "Atualizando a lista de Recursos do Windows..."
-        Check-WindowsFeaturesStatus
-
-        Remove-Job $script:executionJob -Force
-        $script:executionJob = $null    }
-})
-
-$form.Add_FormClosing({
-    $script:stopLogJob = $true
-    if ($script:logJob) {
-        Stop-Job $script:logJob
-        Remove-Job $script:logJob -Force
-    }
-})
-$appsTreeView.Add_AfterCheck({
-    param($sender, $e)
-    if ($script:isUpdatingChecks) { return }
-    try {
-        $script:isUpdatingChecks = $true
-        $currentNode = $e.Node
-        if ($currentNode.Nodes.Count -gt 0) {
-            foreach ($childNode in $currentNode.Nodes) { $childNode.Checked = $currentNode.Checked }
-        }
-        if ($currentNode.Parent -ne $null) {
-            $allSiblingsChecked = $true
-            foreach ($siblingNode in $currentNode.Parent.Nodes) {
-                if (-not $siblingNode.Checked) { $allSiblingsChecked = $false; break }
-            }
-            $currentNode.Parent.Checked = $allSiblingsChecked
-        }
-    }
-    finally { $script:isUpdatingChecks = $false }
-})
-$closeButtonMain.Add_Click({ $form.Close() })
-$clearLogButton.Add_Click({ $statusBox.Clear() })
-$runAllButton.Add_Click({ Start-Execution -AllTabs })
-$runCurrentTabButton.Add_Click({ Start-Execution })
-$filesPanel.AnalyzeButton.Add_Click({ Analyze-CleanableFiles })
-$filesPanel.CleanButton.Add_Click({ Clean-SelectedFiles })
-$scanChocoButton.Add_Click({ Scan-OutdatedChocoApps })
-$updateChocoButton.Add_Click({ Update-SelectedChocoApps })
-$scanRegButton.Add_Click({ Scan-RegistryApps })
-$uninstallRegButton.Add_Click({ Uninstall-SelectedApps })
-$bloatwarePanel.AnalyzeButton.Add_Click({ Analyze-Bloatware })
-$bloatwarePanel.CleanButton.Add_Click({ Apply-BloatwareActions })
-$analyzeRegButton.Add_Click({ Analyze-RegistryIssues })
-$backupRegButton.Add_Click({ Backup-SelectedRegistryIssues })
-$cleanRegButton.Add_Click({ Clean-SelectedRegistryIssues })
-$regCleanerListView.Add_ItemChecked({
-    param($sender, $e)
-    $count = $this.CheckedItems.Count
-    $regCleanerSummaryLabel.Text = "Total de itens selecionados: $count"
-})
-
-# --- Associacao de Eventos ---
-
-# Evento para o timer que dispara as analises iniciais
+# Evento para o timer que dispara as analises iniciais assim que a UI e exibida
 $script:initialScanTimer.Add_Tick({
     $script:initialScanTimer.Stop()
     try {
@@ -2487,8 +2392,6 @@ $script:progressTimer.Add_Tick({
         if ($script:rebootRequired) {
             [System.Windows.Forms.MessageBox]::Show("Uma ou mais tarefas requerem que o computador seja reiniciado para aplicar as alteracoes.", "Reinicializacao Necessaria", "OK", "Warning")
         }
-		Update-Status "Atualizando a lista de Recursos do Windows..."
-        Check-WindowsFeaturesStatus
 
         Remove-Job $script:executionJob -Force
         $script:executionJob = $null
@@ -2653,6 +2556,10 @@ $tabControl.Add_SelectedIndexChanged({
         Update-Status "Analise inicial da limpeza concluida."
     }
 })
+
+# #############################################################################
+# ####### FIM DA ASSOCIACAO DE EVENTOS #######
+# #############################################################################
 
 # --- Inicializacao do Formulario ---
 $form.Add_Shown({

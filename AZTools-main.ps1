@@ -19,7 +19,8 @@ $script:config = @{
     
     # Aplicativos padrao recomendados pela AZCorp
     RecommendedApps = @(
-        @{ Name = "7-Zip";                           ChocoPackage = "7zip";                           Executable = "7zFM.exe" },
+		@{ Name = "softphone 1.0.9";       ChocoPackage = "softphone-interno";              Executable = "softphone.exe" },
+		@{ Name = "7-Zip";                           ChocoPackage = "7zip";                           Executable = "7zFM.exe" },
         @{ Name = "Microsoft Edge";                  ChocoPackage = "microsoft-edge";                  Executable = "msedge.exe" },
 		@{ Name = "Microsoft Teams";                 ChocoPackage = "microsoft-teams-new-bootstrapper"; Executable = "ms-teams.exe" },
         @{ Name = "Power BI Desktop";                ChocoPackage = "powerbi-desktop";                Executable = "PBIDesktop.exe" },
@@ -540,48 +541,64 @@ function Test-NetConnectionSafe($hostname = "8.8.8.8") {
 function Download-File-Robust {
     param(
         [string]$Url, 
-        [string]$OutFile
+        [string]$OutFile,
+        [string]$RefererUrl = $null
     )
     
-    # Cabeçalhos modernos para simular um navegador real, incluindo o Referer
-    $headers = @{ 
-        "User-Agent"      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-        "Accept"          = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
-        "Accept-Language" = "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7"
-        # O Referer é a chave: ele informa ao servidor que a requisiçao veio da pagina principal dos wallpapers
-        "Referer"         = "$($script:config.WallpapersUrl)"
-    }
-
+    $webClient = $null
     try {
-        # Usa Invoke-WebRequest, que é mais moderno, com os cabeçalhos e um tempo limite maior
-        Invoke-WebRequest -Uri $Url -Headers $headers -OutFile $OutFile -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+        # Criamos a nossa nova ferramenta de download
+        $webClient = New-Object System.Net.WebClient
+
+        # Adicionamos os mesmos cabecalhos de navegador que estavamos usando antes
+        $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+		$webClient.Headers.Add("Accept", "image/png,image/jpeg,image/apng,image/*,*/*;q=0.8")
+        $webClient.Headers.Add("Accept-Language", "en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7")
+
+        if (-not [string]::IsNullOrWhiteSpace($RefererUrl)) {
+            $webClient.Headers.Add("Referer", $RefererUrl)
+        }
+
+        # Usamos o metodo de download direto para arquivo.
+        # Ele espera a conclusao e falha se houver um erro de rede (como 404, 403, etc.)
+        $webClient.DownloadFile($Url, $OutFile)
+
     } catch {
-        # Lança uma exceçao detalhada se o download falhar, para nao haver falhas silenciosas
-        $errorMessage = "Falha no download robusto de '$Url'. Motivo: $($_.Exception.Message.Trim())"
+        $errorMessage = "Falha no download (WebClient) de '$Url'. Motivo: $($_.Exception.Message.Trim())"
         Update-Status "ERRO: $errorMessage"
         throw $errorMessage
+    } finally {
+        # Garante que o objeto seja descartado para liberar recursos
+        if ($webClient -ne $null) {
+            $webClient.Dispose()
+        }
     }
 }
 
 function Get-Image-List-From-Url {
     param([string]$Url)
-    
-    Update-Status "... Buscando e analisando a lista de imagens em '$Url'..."
+    Update-Status "... Lendo o conteudo HTML de '$Url' para extrair nomes de imagens..."
+
     try {
-        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 20 -ErrorAction Stop
-        $imageLinks = $response.Links | Where-Object { $_.href -match '\.(png|jpg|jpeg|bmp|gif)$' }
-        if ($null -eq $imageLinks) {
-            Update-Status "AVISO: Nenhum link de imagem encontrado no diretorio '$Url'."
-            return @()
+        # Baixa o conteudo HTML da pagina
+        $htmlContent = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
+
+        # Usa Regex para encontrar todos os links que terminam com extensoes de imagem
+        # Esta expressao captura o nome do arquivo dentro do atributo href
+        $regex = [regex] 'href="([^"]+\.(png|jpg|jpeg|bmp|gif))"'
+        $matches = $regex.Matches($htmlContent)
+
+        # Extrai apenas os nomes dos arquivos dos links encontrados
+        $fileList = $matches | ForEach-Object { $_.Groups[1].Value }
+
+        if ($fileList.Count -eq 0) {
+            throw "Nenhuma imagem encontrada na pagina. O formato do HTML pode ter mudado ou o diretorio esta vazio."
         }
-        $fileNames = $imageLinks | ForEach-Object {
-            try { return [System.Web.HttpUtility]::UrlDecode(($_.href | Split-Path -Leaf)) } catch {}
-        } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-        Update-Status "... Encontradas $($fileNames.Count) imagens."
-        return $fileNames
+        
+        Update-Status "... Encontradas $($fileList.Count) imagens via analise de HTML."
+        return $fileList
     } catch {
-        Update-Status "ERRO: Falha ao buscar a lista de imagens de '$Url'. Motivo: $($_.Exception.Message.Trim())"
-        return @()
+         throw "Nao foi possivel analisar a pagina '$Url'. Erro: $($_.Exception.Message)"
     }
 }
 
@@ -599,8 +616,7 @@ function Get-And-Convert-ShortcutIcon {
     $finalIconPath = Join-Path $IconCachePath "$($ShortcutName -replace '[^a-zA-Z0-9]', '_').ico"
     try {
         Update-Status "... Baixando icone de '$IconUrl'."
-        Download-File-Robust -Url $IconUrl -OutFile $tempIconPath
-    } catch {
+		Download-File-Robust -Url $IconUrl -OutFile $tempIconPath -RefererUrl "$($uri.Scheme)://$($uri.Host)"    } catch {
         Update-Status "AVISO: Falha ao baixar o icone de '$IconUrl'. Erro: $($_.Exception.Message.Trim())"
         return $null
     }
@@ -786,70 +802,94 @@ function Configure-System-ThemeAndTaskbar {
 function Configure-System-Wallpaper { 
     Update-Status "--> Verificando conexao com a internet..."
     Test-NetConnectionSafe
-    $imageLinks = Get-Image-List-From-Url -Url $script:config.WallpapersUrl
-    if ($imageLinks.Count -eq 0) { throw "Nenhum wallpaper foi encontrado no diretorio online." }
     
+    # 1. Cria uma pasta temporaria para as miniaturas que sera limpa no final.
     $tempThumbDir = Join-Path $env:TEMP "WallpaperThumbs_$(Get-Random)"
     New-Item -Path $tempThumbDir -ItemType Directory -Force | Out-Null
     
-    $selectionForm = New-Object System.Windows.Forms.Form
-    $selectionForm.Text = "Selecione o Wallpaper Padrao"
-    $selectionForm.Size = New-Object System.Drawing.Size(640, 520)
-    $selectionForm.StartPosition = "CenterParent"
-    
-    $flowLayoutPanel = New-Object System.Windows.Forms.FlowLayoutPanel; $flowLayoutPanel.Dock = "Fill"; $flowLayoutPanel.AutoScroll = $true
-    $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Aplicar Wallpaper Selecionado"; $okButton.Dock = "Bottom"
-    
-    $radioButtons = @()
-    foreach ($imageFile in $imageLinks) { 
-        if ([string]::IsNullOrWhiteSpace($imageFile)) { continue }
-        $encodedImageFile = [System.Web.HttpUtility]::UrlPathEncode($imageFile)
-        $imageUrl = "$($script:config.WallpapersUrl.TrimEnd('/'))/$encodedImageFile"
-        $thumbPath = Join-Path $tempThumbDir $imageFile
-        try { Download-File-Robust -Url $imageUrl -OutFile $thumbPath } catch { continue }
-        $groupBox = New-Object System.Windows.Forms.GroupBox; $groupBox.Size = New-Object System.Drawing.Size(180, 140)
-        $pictureBox = New-Object System.Windows.Forms.PictureBox; $pictureBox.Dock = "Fill"; $pictureBox.SizeMode = "Zoom"
-        $imageBytes = [System.IO.File]::ReadAllBytes($thumbPath)
-        $memoryStream = New-Object System.IO.MemoryStream(,$imageBytes)
-        $pictureBox.Image = [System.Drawing.Image]::FromStream($memoryStream)
-        $decodedImageFile = [System.Web.HttpUtility]::UrlDecode($imageFile)
-        $friendlyName = ($decodedImageFile -replace '\.(png|jpg|jpeg|bmp|gif)$', '') -replace '[-_]', ' '
-        $radioButton = New-Object System.Windows.Forms.RadioButton; $radioButton.Text = $friendlyName; $radioButton.Dock = "Bottom"; $radioButton.Tag = $imageFile
-        $radioButtons += $radioButton
-        $groupBox.Controls.AddRange(@($pictureBox, $radioButton))
-        $flowLayoutPanel.Controls.Add($groupBox) 
+    try {
+        $imageLinks = Get-Image-List-From-Url -Url $script:config.WallpapersUrl
+        if ($imageLinks.Count -eq 0) { throw "Nenhum wallpaper foi encontrado no diretorio online." }
+        
+        # 2. Prepara a janela de selecao.
+        $selectionForm = New-Object System.Windows.Forms.Form
+        $selectionForm.Text = "Selecione o Wallpaper Padrao"
+        $selectionForm.Size = New-Object System.Drawing.Size(640, 520)
+        $selectionForm.StartPosition = "CenterParent"
+        
+        $flowLayoutPanel = New-Object System.Windows.Forms.FlowLayoutPanel; $flowLayoutPanel.Dock = "Fill"; $flowLayoutPanel.AutoScroll = $true
+        $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Aplicar Wallpaper Selecionado"; $okButton.Dock = "Bottom"
+        
+        $radioButtons = @()
+        
+        # 3. Loop para baixar e exibir cada miniatura.
+        foreach ($imageFile in $imageLinks) { 
+            if ([string]::IsNullOrWhiteSpace($imageFile)) { continue }
+            
+            $filename = $imageFile | Split-Path -Leaf
+            $imageUrl = "$($script:config.WallpapersUrl.TrimEnd('/'))/$([System.Web.HttpUtility]::UrlPathEncode($filename))"
+            $thumbPath = Join-Path $tempThumbDir $filename
+            
+            try {
+                Download-File-Robust -Url $imageUrl -OutFile $thumbPath -RefererUrl $script:config.WallpapersUrl
+                
+                $imageBytes = [System.IO.File]::ReadAllBytes($thumbPath)
+                $memoryStream = [System.IO.MemoryStream]::new($imageBytes)
+                
+                $groupBox = New-Object System.Windows.Forms.GroupBox; $groupBox.Size = New-Object System.Drawing.Size(180, 140)
+                $pictureBox = New-Object System.Windows.Forms.PictureBox; $pictureBox.Dock = "Fill"; $pictureBox.SizeMode = "Zoom"
+                $pictureBox.Image = [System.Drawing.Image]::FromStream($memoryStream)
+                
+                $friendlyName = ($filename -replace '\.(png|jpg|jpeg|bmp|gif|webp)$', '') -replace '[-_]', ' '
+                $radioButton = New-Object System.Windows.Forms.RadioButton; $radioButton.Text = $friendlyName; $radioButton.Dock = "Bottom"; $radioButton.Tag = $filename # A Tag agora e so o nome do arquivo.
+                $radioButtons += $radioButton
+                $groupBox.Controls.AddRange(@($pictureBox, $radioButton))
+                $flowLayoutPanel.Controls.Add($groupBox) 
+
+            } catch {
+                Update-Status "AVISO: Falha ao carregar a miniatura para '$filename'. Pulando..."
+                continue
+            }
+        }
+        
+        # 4. Exibe a janela de selecao para o usuario.
+        if ($radioButtons.Count -eq 0) { throw "Nenhuma imagem pode ser carregada para selecao." }
+        
+        $radioButtons[0].Checked = $true
+        $okButton.Add_Click({ $selectionForm.DialogResult = [System.Windows.Forms.DialogResult]::OK; $selectionForm.Close() })
+        $selectionForm.Controls.AddRange(@($flowLayoutPanel, $okButton))
+        $result = $selectionForm.ShowDialog()
+        $selectionForm.Dispose()
+        
+        if ($result -ne [System.Windows.Forms.DialogResult]::OK) { return "CANCELADO" }
+        
+        # 5. Aplica o wallpaper selecionado.
+        $selectedFilename = ($radioButtons | Where-Object { $_.Checked }).Tag
+        if (-not $selectedFilename) { return "CANCELADO" }
+        
+        Update-Status "--> Aplicando o wallpaper selecionado..."
+        $finalImageUrl = "$($script:config.WallpapersUrl.TrimEnd('/'))/$([System.Web.HttpUtility]::UrlPathEncode($selectedFilename))"
+        $finalWallpaperPath = Join-Path $env:TEMP $selectedFilename
+        
+        Download-File-Robust -Url $finalImageUrl -OutFile $finalWallpaperPath -RefererUrl $script:config.WallpapersUrl    
+        [Wallpaper]::SystemParametersInfo(20, 0, $finalWallpaperPath, 3) | Out-Null
+        
+        # Limpa o arquivo final do wallpaper da pasta Temp
+        if (Test-Path $finalWallpaperPath) { Remove-Item -Path $finalWallpaperPath -Force -ErrorAction SilentlyContinue }
+        Update-Status "--> Wallpaper atualizado com sucesso!"
+
+    } finally {
+        # 6. Limpeza final: Garante que a pasta de miniaturas seja sempre apagada.
+        if (Test-Path $tempThumbDir) {
+            Remove-Item -Path $tempThumbDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
-    
-    if ($radioButtons.Count > 0) { $radioButtons[0].Checked = $true }
-    
-    $okButton.Add_Click({ $selectionForm.DialogResult = [System.Windows.Forms.DialogResult]::OK; $selectionForm.Close() })
-    $selectionForm.Controls.AddRange(@($flowLayoutPanel, $okButton))
-    $result = $selectionForm.ShowDialog()
-    $selectionForm.Dispose()
-    
-    if ($result -ne [System.Windows.Forms.DialogResult]::OK) { Remove-Item -Path $tempThumbDir -Recurse -Force; return "CANCELADO" }
-    
-    $selectedImage = $null
-    foreach ($radioButton in $radioButtons) { if ($radioButton.Checked) { $selectedImage = $radioButton.Tag; break } }
-    
-    if (-not $selectedImage) { Remove-Item -Path $tempThumbDir -Recurse -Force; return "CANCELADO" }
-    
-    Remove-Item -Path $tempThumbDir -Recurse -Force
-    
-    Update-Status "--> Aplicando '$selectedImage' como wallpaper..."
-    $encodedImageFile = [System.Web.HttpUtility]::UrlPathEncode($selectedImage)
-    $imageUrl = "$($script:config.WallpapersUrl.TrimEnd('/'))/$encodedImageFile"
-    $wallpaperPath = Join-Path $env:TEMP $selectedImage
-    Download-File-Robust -Url $imageUrl -OutFile $wallpaperPath
-    
-    [Wallpaper]::SystemParametersInfo(20, 0, $wallpaperPath, 3) | Out-Null
-    Update-Status "--> Wallpaper atualizado via API do Windows."
 }
 
 function Configure-Teams-Backgrounds {
     Test-NetConnectionSafe
     Stop-Process-AndWait -processName "msteams"; Stop-Process-AndWait -processName "ms-teams"
-    $imageLinks = Get-Image-List-From-Url -Url $script:config.TeamsBackgroundsUrl
+	$imageLinks = Get-Image-List-From-Url -Url $script:config.TeamsBackgroundsUrl
     if ($imageLinks.Count -eq 0) { throw "Nenhuma imagem de fundo para o Teams foi encontrada." }
     $tempThumbDir = Join-Path $env:TEMP "TeamsThumbs_$(Get-Random)"; New-Item -Path $tempThumbDir -ItemType Directory -Force | Out-Null
     $installForm = New-Object System.Windows.Forms.Form; $installForm.Text = "Selecione os Fundos de Tela para Instalar"; $installForm.Size = New-Object System.Drawing.Size(640, 520); $installForm.StartPosition = "CenterParent"
@@ -861,11 +901,13 @@ function Configure-Teams-Backgrounds {
     $allCheckBoxes = @()
     foreach ($imageFile in $imageLinks) {
         if ([string]::IsNullOrWhiteSpace($imageFile)) { continue }
-        $encodedImageFileForUrl = [System.Web.HttpUtility]::UrlPathEncode($imageFile); $imageUrl = "$($script:config.TeamsBackgroundsUrl.TrimEnd('/'))/$encodedImageFileForUrl"; $thumbPath = Join-Path $tempThumbDir $imageFile
-        try { Download-File-Robust -Url $imageUrl -OutFile $thumbPath } catch { continue }
+        $encodedImageFileForUrl = [System.Web.HttpUtility]::UrlPathEncode(($imageFile | Split-Path -Leaf)); $imageUrl = "$($script:config.TeamsBackgroundsUrl.TrimEnd('/'))/$encodedImageFileForUrl"; $thumbPath = Join-Path $tempThumbDir ($imageFile | Split-Path -Leaf)
+        try { Download-File-Robust -Url $imageUrl -OutFile $thumbPath -RefererUrl $script:config.TeamsBackgroundsUrl } catch { continue }
         $groupBox = New-Object System.Windows.Forms.GroupBox; $groupBox.Size = New-Object System.Drawing.Size(180, 140)
         $pictureBox = New-Object System.Windows.Forms.PictureBox; $pictureBox.Dock = "Fill"; $pictureBox.SizeMode = "Zoom"
-        $imageBytes = [System.IO.File]::ReadAllBytes($thumbPath); $memoryStream = New-Object System.IO.MemoryStream(,$imageBytes); $pictureBox.Image = [System.Drawing.Image]::FromStream($memoryStream)
+        $imageBytes = [System.IO.File]::ReadAllBytes($thumbPath); 
+		$memoryStream = [System.IO.MemoryStream]::new($imageBytes); 
+		$pictureBox.Image = [System.Drawing.Image]::FromStream($memoryStream)
         $decodedImageFile = [System.Web.HttpUtility]::UrlDecode($imageFile)
         $friendlyName = ($decodedImageFile -replace '\.(png|jpg|jpeg|bmp|gif)$', '') -replace '[-_]', ' '
         $checkBox = New-Object System.Windows.Forms.CheckBox; $checkBox.Text = $friendlyName; $checkBox.Dock = "Bottom"; $checkBox.Tag = $imageFile
@@ -1016,30 +1058,39 @@ function Install-Softphone {
     }
     
     Update-Status "--> Iniciando instalacao silenciosa do Softphone..."
-    # CORRECAO: Adiciona -PassThru para obter o objeto do processo e verificar seu codigo de saida.
-    $process = Start-Process $installerPath -ArgumentList "/S" -Wait -PassThru
     
-    Update-Status "--> Processo de instalacao finalizado com codigo de saida: $($process.ExitCode)."
+    # --- CORRECAO PRINCIPAL APLICADA AQUI ---
+    # 1. O comando "-Wait" e "-PassThru" foram removidos.
+    # O "-Wait" estava fazendo o script travar porque o instalador do softphone
+    # provavelmente não encerra seu processo principal após a conclusão.
+    Start-Process $installerPath -ArgumentList "/S"
+
+    # 2. Adicionamos uma pausa manual (sleep).
+    # Como não estamos mais esperando o processo terminar, precisamos dar um tempo
+    # fixo para que a instalação tenha a chance de ser concluída em segundo plano.
+    # 20 segundos é geralmente um tempo seguro para a maioria das instalações leves.
+    Update-Status "--> Aguardando 20 segundos para a conclusao da instalacao em segundo plano..."
+    Start-Sleep -Seconds 20
     
-    # A maioria dos instaladores retorna 0 em caso de sucesso.
-    if ($process.ExitCode -ne 0) {
-        throw "O instalador do Softphone finalizou com um codigo de erro: $($process.ExitCode). A instalacao falhou."
-    }
+    # 3. A verificação do ExitCode foi removida, pois sem o "-Wait", não é possível capturá-lo.
+    # Esta é uma troca necessária para evitar que o script inteiro trave.
+    Update-Status "--> Processo de instalacao enviado. Assumindo sucesso e continuando."
     
     if ($softphone.Executable) {
-        Update-Status "--> Aguardando para iniciar o aplicativo..."
+        Update-Status "--> Procurando o executavel para iniciar o aplicativo..."
         Start-Sleep -Seconds 3
         $exePath = Find-ExecutablePath -ExecutableName $softphone.Executable
         if ($exePath) {
             $firstPath = $exePath | Select-Object -First 1
-            Update-Status "--> Iniciando Softphone..."
+            Update-Status "--> Iniciando Softphone em: $firstPath"
+            # Este Start-Process já funciona corretamente, pois não espera o softphone fechar.
             Start-Process -FilePath $firstPath
+        } else {
+            Update-Status "AVISO: Executavel do Softphone não encontrado após a instalação."
         }
     }
-    Update-Status "--> Instalacao do Softphone concluida."
+    Update-Status "--> Tarefa de instalação do Softphone concluida."
 }
-
-
 
 function Install-OneDrive {
     if (Get-Process -Name "OneDrive" -ErrorAction SilentlyContinue) { return "CANCELADO" }
@@ -1543,8 +1594,6 @@ function Scan-RegistryApps { $scanRegButton.Enabled = $false; $searchForUpdateBu
 
 function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUninstall = $regUpdatesListView.CheckedItems; if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }; if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }; foreach ($item in $toUninstall) { $appName = $item.SubItems[2].Text; $unStr = $item.Tag; Run-Task "Desinstalar $appName" { if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }; if ($unStr.StartsWith("choco uninstall")) { Start-Process "choco.exe" -ArgumentList "uninstall $($unStr.Split(' ')[-1]) -y" -Wait -WindowStyle Hidden; return }; $cmd = ""; $args = ""; if ($unStr.StartsWith('"')) { $end = $unStr.IndexOf('"', 1); if ($end -ne -1) { $cmd = $unStr.Substring(1, $end - 1); $args = $unStr.Substring($end + 1).Trim() } }; if (-not $cmd) { $parts = $unStr -split ' ', 2; $cmd = $parts[0]; if ($parts.Count -gt 1) { $args = $parts[1] } }; $cmd = $cmd.Replace('"', ''); $silent = ""; if ($cmd -match 'msiexec' -and $args -notmatch '/qn') { $args = $args.Replace("/I", "/X"); $silent = "/qn /norestart" } elseif ($args -notmatch '(/S|/silent|/quiet)') { $silent = "/S" }; $finalArgs = "$args $silent".Trim(); Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -EA Stop } }; Scan-RegistryApps }
 
-function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUninstall = $regUpdatesListView.CheckedItems; if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }; if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }; foreach ($item in $toUninstall) { $appName = $item.SubItems[2].Text; $unStr = $item.Tag; Run-Task "Desinstalar $appName" { if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }; if ($unStr.StartsWith("choco uninstall")) { Start-Process "choco.exe" -ArgumentList "uninstall $($unStr.Split(' ')[-1]) -y" -Wait -WindowStyle Hidden; return }; $cmd = ""; $args = ""; if ($unStr.StartsWith('"')) { $end = $unStr.IndexOf('"', 1); if ($end -ne -1) { $cmd = $unStr.Substring(1, $end - 1); $args = $unStr.Substring($end + 1).Trim() } }; if (-not $cmd) { $parts = $unStr -split ' ', 2; $cmd = $parts[0]; if ($parts.Count -gt 1) { $args = $parts[1] } }; $cmd = $cmd.Replace('"', ''); $silent = ""; if ($cmd -match 'msiexec' -and $args -notmatch '/qn') { $args = $args.Replace("/I", "/X"); $silent = "/qn /norestart" } elseif ($args -notmatch '(/S|/silent|/quiet)') { $silent = "/S" }; $finalArgs = "$args $silent".Trim(); Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -EA Stop } }; Scan-RegistryApps }
-
 function Check-WindowsFeaturesStatus {
     # --- ETAPA 0: Preparar a UI ---
     $analyzeButton = $null
@@ -1562,91 +1611,59 @@ function Check-WindowsFeaturesStatus {
     $loadingItem = New-Object System.Windows.Forms.ListViewItem("Analisando, por favor aguarde...")
     $loadingItem.ForeColor = [System.Drawing.Color]::Khaki
     $windowsFeaturesListView.Items.Add($loadingItem)
-    Update-Status "Iniciando processo externo para analisar os Recursos do Windows..."
+    Update-Status "Iniciando analise dos Recursos do Windows... (A UI pode congelar por um momento)"
     
-    # --- ETAPA 1: Rodar o comando em um processo separado ---
-    $tempFile = Join-Path $env:TEMP "$(New-Guid).json"
-    
-    # --- ALTERADO: Converte o Status para Texto na Origem usando uma Propriedade Calculada ---
-    $selectExpression = @{Name='State'; Expression={$_.State.ToString()}}
-    $commandToRun = "Get-WindowsOptionalFeature -Online | Select-Object DisplayName, FeatureName, $selectExpression | ConvertTo-Json -Depth 3 | Out-File -FilePath '$tempFile' -Encoding UTF8 -Force"
+    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
     
     try {
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = "powershell.exe"
-        $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command `"$commandToRun`""
+        # --- ETAPA 1: Executar o comando e coletar apenas os dados necessarios ---
+        $allFeatures = Get-WindowsOptionalFeature -Online -ErrorAction Stop
         
-        [System.Windows.Forms.MessageBox]::Show("Uma janela do PowerShell sera aberta para analisar os recursos. Por favor, aguarde a conclusao. A janela fechara automaticamente.", "Analise em Andamento", "OK", "Information")
-        
-        $process = Start-Process -FilePath $psi.FileName -ArgumentList $psi.Arguments -Wait -PassThru
-        
-        if ($process.ExitCode -ne 0) {
-            throw "O processo de analise externo falhou com o código de saida $($process.ExitCode)."
+        $results = foreach ($feature in $allFeatures) {
+            [pscustomobject]@{
+                FeatureName = $feature.FeatureName
+                State       = $feature.State.ToString()
+            }
         }
 
-        # --- ETAPA 2: Ler os resultados do arquivo temporario ---
-        if (-not (Test-Path $tempFile) -or (Get-Item $tempFile).Length -eq 0) {
-            throw "O arquivo de resultados da analise nao foi criado ou esta vazio."
-        }
-        
-        $results = Get-Content -Path $tempFile -Raw | ConvertFrom-Json
-        
-        # --- ETAPA 3: Popular a lista de forma explicita e segura ---
+        # --- ETAPA 2: Popular a lista com a nova estrutura de 2 colunas ---
         $windowsFeaturesListView.BeginUpdate()
         $windowsFeaturesListView.Items.Clear()
 
         if ($results) {
-            # Se houver apenas um resultado, ConvertFrom-Json pode nao retornar uma coleçao. Normalizamos para uma lista.
-            if ($results -isnot [System.Collections.IEnumerable]) { $results = @($results) }
-
             $script:cachedWindowsFeatures = $results
             Update-Status "Analise concluida. Populando a lista com $($results.Count) recursos..."
 
             foreach ($feature in $script:cachedWindowsFeatures) {
-                
-                # --- REESCRITO: Lógica de criaçao de item para maxima compatibilidade ---
-                $displayName = if ([string]::IsNullOrWhiteSpace($feature.DisplayName)) { "(Nome Indisponivel)" } else { $feature.DisplayName }
-                $statusText = if ([string]::IsNullOrWhiteSpace($feature.State)) { "Desconhecido" } else { $feature.State }
-
-                # 1. Cria o item APENAS com o texto da primeira coluna.
-                $item = New-Object System.Windows.Forms.ListViewItem($displayName)
-                
-                # 2. Adiciona o texto da segunda coluna como um "SubItem".
-                $item.SubItems.Add($statusText) | Out-Null
-                
-                # 3. Define as outras propriedades no objeto ja criado.
+                $item = New-Object System.Windows.Forms.ListViewItem($feature.FeatureName) # Primeira coluna e o Nome Tecnico
+                $item.SubItems.Add($feature.State) | Out-Null                         # Segunda coluna e o Status
                 $item.Tag = $feature.FeatureName
                 
-                # 4. Aplica a cor com base no texto do status (que agora esta correto).
-                if ($statusText -eq 'Enabled') {
+                if ($feature.State -eq 'Enabled') {
                     $item.ForeColor = [System.Drawing.Color]::LightGreen
                     $item.Checked = $false 
                 } else {
                     $item.ForeColor = [System.Drawing.Color]::Salmon
                 }
-                
-                # 5. Adiciona o item totalmente construido à lista.
                 $windowsFeaturesListView.Items.Add($item) | Out-Null
             }
             Update-Status "Lista de Recursos do Windows carregada com sucesso."
         } else {
-            Update-Status "AVISO: Nenhum recurso opcional foi encontrado após a analise."
+            Update-Status "AVISO: Nenhum recurso opcional foi encontrado apos a analise."
         }
 
     } catch {
-        Update-Status "ERRO CRiTICO ao analisar Recursos do Windows: $($_.Exception.Message)"
+        Update-Status "ERRO CRITICO ao analisar Recursos do Windows: $($_.Exception.Message)"
         $windowsFeaturesListView.Items.Clear()
         $errorItem = New-Object System.Windows.Forms.ListViewItem("Falha ao carregar recursos. Verifique o log.")
         $errorItem.ForeColor = [System.Drawing.Color]::Red
         $windowsFeaturesListView.Items.Add($errorItem)
     } finally {
-        # --- ETAPA 4: Limpeza ---
-        if (Test-Path $tempFile) {
-            Remove-Item $tempFile -Force
-        }
+        # --- ETAPA 3: Limpeza da UI ---
         $windowsFeaturesListView.EndUpdate()
         $windowsFeaturesListView.AutoResizeColumns(1)
         if ($analyzeButton) { $analyzeButton.Enabled = $true }
+        $form.Cursor = [System.Windows.Forms.Cursors]::Default
     }
 }
 
@@ -1672,7 +1689,7 @@ function Populate-AppsTreeView {
 
     # Funcao auxiliar para criar e colorir os nos
     function New-AppNode($appName, $categoryNode) {
-        $node = New-Object System.Windows.Forms.TreeNode("Instalar $appName")
+        $node = New-Object System.Windows.Forms.TreeNode("$appName")
         
         # Verifica se o app esta no cache de instalados
         $match = $installedAppsCache | Where-Object { $_ -like "*$appName*" } | Select-Object -First 1
@@ -1684,31 +1701,22 @@ function Populate-AppsTreeView {
         $categoryNode.Nodes.Add($node) | Out-Null
     }
 
-	$internal = New-Object System.Windows.Forms.TreeNode("Aplicativos Internos")
+    # Cria as categorias da arvore
     $recomm = New-Object System.Windows.Forms.TreeNode("Aplicativos Recomendados")
     $optional = New-Object System.Windows.Forms.TreeNode("Aplicativos Opcionais")
     $shortcuts = New-Object System.Windows.Forms.TreeNode("Atalhos da Web")
-
-    # CORRECAO: A validacao agora usa -like para ser mais flexivel com nomes que incluem versao.
-    $softphoneInstalled = $installedAppsCache | Where-Object { $_ -like "*Softphone*" }
-    if ($softphoneInstalled) {
-        $node = New-Object System.Windows.Forms.TreeNode("Instalar Softphone (Instalado)"); $node.ForeColor = [System.Drawing.Color]::LightGreen; $node.Checked = $false; $internal.Nodes.Add($node) | Out-Null
-    } else { $internal.Nodes.Add("Instalar Softphone") | Out-Null }
     
-    $oneDriveInstalled = $installedAppsCache | Where-Object { $_ -like "*Microsoft OneDrive*" }
-    if ($oneDriveInstalled) {
-        $node = New-Object System.Windows.Forms.TreeNode("Instalar OneDrive (Instalado)"); $node.ForeColor = [System.Drawing.Color]::LightGreen; $node.Checked = $false; $internal.Nodes.Add($node) | Out-Null
-    } else { $internal.Nodes.Add("Instalar OneDrive") | Out-Null }
-
-    # Popula as outras categorias
+    # Popula as categorias a partir da configuração central
     $script:config.RecommendedApps | ForEach-Object { New-AppNode -appName $_.Name -categoryNode $recomm }
     $script:config.OptionalApps | ForEach-Object { New-AppNode -appName $_.Name -categoryNode $optional }
     $script:config.WebShortcuts | ForEach-Object { $shortcuts.Nodes.Add("Criar Atalho: $($_.Name)") | Out-Null }
     
-    $appsTreeView.Nodes.AddRange(@($internal, $recomm, $optional, $shortcuts))
+    # Adiciona as categorias preenchidas à arvore principal da interface
+    $appsTreeView.Nodes.AddRange(@($recomm, $optional, $shortcuts))
     $appsTreeView.ExpandAll()
     $appsTreeView.EndUpdate()
 }
+
 function Populate-GodModeList { $script:godModeItems = @(); $path = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace"; Get-ChildItem $path -EA SilentlyContinue | % { $name = (Get-ItemProperty -Path $_.PSPath -Name '(default)' -EA SilentlyContinue).'(default)'; $cmd = "explorer.exe shell:::$($_.PSChildName)"; if (-not [string]::IsNullOrWhiteSpace($name)) { $script:godModeItems += @{ Name = $name; Command = $cmd } } }; $script:godModeItems = $script:godModeItems | Sort-Object Name; $godModeListView.Items.Clear(); $script:godModeItems.ForEach({ $item = New-Object System.Windows.Forms.ListViewItem($_.Name); $item.SubItems.Add($_.Command) | Out-Null; $godModeListView.Items.Add($item) | Out-Null }); $godModeListView.AutoResizeColumns(1); $godModeListView.Add_MouseDoubleClick({ if ($this.SelectedItems.Count -gt 0) { $cmd = $this.SelectedItems[0].SubItems[1].Text; try { $parts = $cmd -split ' ', 2; $exe = $parts[0]; $args = if ($parts.Count -gt 1) { $parts[1] } else { "" }; Start-Process -FilePath $exe -ArgumentList $args } catch {} } }); $godModeSearchBox.Add_TextChanged({ $text = $this.Text; $godModeListView.BeginUpdate(); $godModeListView.Items.Clear(); $script:godModeItems | ? { $_.Name -like "*$text*" } | % { $item = New-Object System.Windows.Forms.ListViewItem($_.Name); $item.SubItems.Add($_.Command) | Out-Null; $godModeListView.Items.Add($item) | Out-Null }; $godModeListView.EndUpdate() }) }
 function Set-CheckedStateOnControl { param($Control, $State); if ($Control -is [System.Windows.Forms.CheckedListBox]) { for ($i = 0; $i -lt $Control.Items.Count; $i++) { $Control.SetItemChecked($i, $State) } } elseif ($Control -is [System.Windows.Forms.TreeView]) { function Set-Node($nodes, $check) { foreach ($n in $nodes) { $n.Checked = $check; if ($n.Nodes.Count -gt 0) { Set-Node $n.Nodes $check } } }; Set-Node $Control.Nodes $State } elseif ($Control -is [System.Windows.Forms.ListView]) { $Control.Items | % { $_.Checked = $State } } }
 function Sort-ListView {
@@ -1790,21 +1798,28 @@ function Start-Execution {
                     $systemCheckedListBox.CheckedItems | ForEach-Object { $tasksToProcess.Add(@{ Name = $_; Definition = $systemTasks[$_] }) | Out-Null }
                     $maintenanceCheckedListBox.CheckedItems | ForEach-Object { $tasksToProcess.Add(@{ Name = $_; Definition = $maintenanceTasks[$_] }) | Out-Null }
                 }
-                "(ALPHA) Recursos do Windows" {
-						foreach ($item in $windowsFeaturesListView.CheckedItems) {
-                        # A logica agora pega o nome tecnico do Tag do item
-                        $featureName = $item.Tag
-                        $displayName = $item.Text
-                        $currentStatus = $item.SubItems[1].Text
-                        if ($currentStatus -ne 'Enabled') {
-                            $actionBlock = [scriptblock]::Create("
-                                Enable-WindowsOptionalFeature -Online -FeatureName '$featureName' -All -NoRestart -Verbose -ErrorAction Stop
-                                `$status = Get-WindowsOptionalFeature -Online -FeatureName '$featureName'
-                                if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }")
-                            $tasksToProcess.Add(@{ Name = "Habilitando Recurso: $displayName"; Definition = $actionBlock }) | Out-Null
-                        }
-                    }
-                }
+				"(BETA) Recursos do Windows" {
+					foreach ($item in $windowsFeaturesListView.CheckedItems) {
+					$featureName = $item.Text 
+					$currentStatus = $item.SubItems[1].Text
+
+    if ($currentStatus -eq 'Disabled') {
+        $actionBlock = [scriptblock]::Create("
+            Enable-WindowsOptionalFeature -Online -FeatureName '$featureName' -All -NoRestart -Verbose -ErrorAction Stop
+            `$status = Get-WindowsOptionalFeature -Online -FeatureName '$featureName'
+            if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }")
+        $tasksToProcess.Add(@{ Name = "Habilitando Recurso: $featureName"; Definition = $actionBlock }) | Out-Null
+    }
+    # Se estiver habilitado, a tarefa sera DESABILITAR
+    elseif ($currentStatus -eq 'Enabled') {
+        $actionBlock = [scriptblock]::Create("
+            Disable-WindowsOptionalFeature -Online -FeatureName '$featureName' -NoRestart -Verbose -ErrorAction Stop
+            `$status = Get-WindowsOptionalFeature -Online -FeatureName '$featureName'
+            if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }")
+        $tasksToProcess.Add(@{ Name = "Desabilitando Recurso: $featureName"; Definition = $actionBlock }) | Out-Null
+    }
+}				
+}
                 "Personalizacao" {
                     $personalizationCheckedListBox.CheckedItems | ForEach-Object { $tasksToProcess.Add(@{ Name = $_; Definition = $personalizationTasks[$_] }) | Out-Null }
                 }
@@ -2008,7 +2023,7 @@ $softwaresTabPage = New-Object System.Windows.Forms.TabPage; $softwaresTabPage.T
 $debloatTabPage = New-Object System.Windows.Forms.TabPage; $debloatTabPage.Text = "Otimizacao e Bloatware"
 $endpointSecurityTabPage = New-Object System.Windows.Forms.TabPage; $endpointSecurityTabPage.Text = "Endpoint Security"
 $godModeTabPage = New-Object System.Windows.Forms.TabPage; $godModeTabPage.Text = "God Mode"
-$windowsFeaturesTabPage = New-Object System.Windows.Forms.TabPage; $windowsFeaturesTabPage.Text = "(ALPHA) Recursos do Windows"
+$windowsFeaturesTabPage = New-Object System.Windows.Forms.TabPage; $windowsFeaturesTabPage.Text = "(BETA) Recursos do Windows"
 
 $tabControl.TabPages.AddRange(@($systemTabPage, $filesTabPage, $personalizationTabPage, $softwaresTabPage, $debloatTabPage, $endpointSecurityTabPage, $godModeTabPage, $windowsFeaturesTabPage))
 
@@ -2043,8 +2058,8 @@ $featuresContainerPanel.Controls.Add($featuresSearchBox, 0, 1)
 $windowsFeaturesListView = New-Object System.Windows.Forms.ListView; $windowsFeaturesListView.View = 'Details'; $windowsFeaturesListView.CheckBoxes = $true; $windowsFeaturesListView.FullRowSelect = $true
 $windowsFeaturesListView.Name = "featuresListView" 
 $windowsFeaturesListView.Add_ColumnClick({ Sort-ListView @args }) 
-$windowsFeaturesListView.Columns.Add("Recurso Opcional", 350) | Out-Null; $windowsFeaturesListView.Columns.Add("Status", 100) | Out-Null
-
+$windowsFeaturesListView.Columns.Add("Nome Tecnico", 350) | Out-Null
+$windowsFeaturesListView.Columns.Add("Status", 100) | Out-Null
 $featuresMainPanelGroup = (Create-TitledControlPanel $featuresContainerPanel "Recursos Opcionais do Windows" $windowsFeaturesListView -ExtraButtonText "Analisar Recursos" -ExtraButtonAction { Check-WindowsFeaturesStatus }).Parent
 
 $featuresContainerPanel.Controls.Add($featuresMainPanelGroup, 0, 2)
@@ -2148,6 +2163,11 @@ $chocoUpdatesGroup.Controls.AddRange(@($chocoUpdatesListView, $chocoUpdatesButto
 
 $managementSplitContainer.Panel1.Controls.Add($chocoUpdatesGroup)
 $regUpdatesGroup = New-Object System.Windows.Forms.GroupBox; $regUpdatesGroup.Text = "Todos os aplicativos instalados"; $regUpdatesGroup.Dock = "Fill"
+
+$regSearchBox = New-Object System.Windows.Forms.TextBox
+$regSearchBox.Dock = "Top" # Define que ela ficará no topo do GroupBox
+
+
 $regUpdatesListView = New-Object System.Windows.Forms.ListView; $regUpdatesListView.Dock = "Fill"; $regUpdatesListView.View = "Details"; $regUpdatesListView.CheckBoxes = $true;
 $regUpdatesListView.Name = 'registeredAppsListView' # Atribui um nome para o estado da ordenacao
 $regUpdatesListView.Add_ColumnClick({ Sort-ListView @args }) # Adiciona o evento de ordenacao
@@ -2158,8 +2178,9 @@ $scanRegButton = New-Object System.Windows.Forms.Button; $scanRegButton.Text = "
 $searchForUpdateButton = New-Object System.Windows.Forms.Button; $searchForUpdateButton.Text = "Pesquisar Att."; $searchForUpdateButton.Dock = "Right"; $searchForUpdateButton.Width = 120; $searchForUpdateButton.Enabled = $false
 $uninstallRegButton = New-Object System.Windows.Forms.Button; $uninstallRegButton.Text = "Desinstalar Selecionados"; $uninstallRegButton.Dock = "Right"; $uninstallRegButton.Width = 180; $uninstallRegButton.Enabled = $false
 $regButtonPanel.Controls.AddRange(@($scanRegButton, $uninstallRegButton, $searchForUpdateButton))
-$regUpdatesGroup.Controls.AddRange(@($regUpdatesListView, $regButtonPanel))
+$regUpdatesGroup.Controls.AddRange(@($regUpdatesListView, $regSearchBox, $regButtonPanel))
 $managementSplitContainer.Panel2.Controls.Add($regUpdatesGroup)
+
 
 # Aba God Mode
 $godModeGroup = New-Object System.Windows.Forms.GroupBox; $godModeGroup.Text = "Atalhos do Painel de Controle (Duplo Clique para Abrir)"; $godModeGroup.Dock = "Fill"
@@ -2239,7 +2260,6 @@ $maintenanceTasks = [ordered]@{
 }
 
 $appTasks = [ordered]@{
-    "Instalar Softphone"                       = { Install-Softphone }
     "Instalar OneDrive"                        = { Install-OneDrive }
 }
 
@@ -2249,9 +2269,19 @@ $shortcutTasks = [ordered]@{ }
 $allAppDefinitions = $script:config.RecommendedApps + $script:config.OptionalApps
 $allAppDefinitions | ForEach-Object {
     $app = $_
-    $taskName = "Instalar $($app.Name)"
-    $executableValue = if ([string]::IsNullOrEmpty($app.Executable)) { "" } else { $app.Executable }
-    $taskAction = [scriptblock]::Create("Install-App -appInfo @{Name=`"$($app.Name)`"; ChocoPackage=`"$($app.ChocoPackage)`"; Executable=`"$executableValue`"}")
+    $taskName = "$($app.Name)"
+    $taskAction = $null
+
+    # Condição especial para o softphone usar sua própria função de instalação
+    if ($app.ChocoPackage -eq "softphone-interno") {
+        $taskAction = { Install-Softphone }
+    } 
+    # Lógica padrão para todos os outros apps
+    else {
+        $executableValue = if ([string]::IsNullOrEmpty($app.Executable)) { "" } else { $app.Executable }
+        $taskAction = [scriptblock]::Create("Install-App -appInfo @{Name=`"$($app.Name)`"; ChocoPackage=`"$($app.ChocoPackage)`"; Executable=`"$executableValue`"}")
+    }
+    
     $appTasks.Add($taskName, $taskAction)
 }
 
@@ -2323,7 +2353,7 @@ $script:progressTimer.Add_Tick({
         }
         $script:controlsToToggle.ForEach({ if ($_.IsHandleCreated) { $_.Enabled = $true } })
 
-        if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
+		if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
 
         if ($script:dismRepairSuggested) {
             [System.Windows.Forms.MessageBox]::Show("O Windows nao encontrou os arquivos para instalar/alterar um ou mais recursos.`n`nRecomenda-se executar 'Reparar Imagem do Windows (DISM)' e 'Verificar Integridade do Sistema (SFC)'.", "Sugestao de Reparo", "OK", "Information")
@@ -2331,10 +2361,11 @@ $script:progressTimer.Add_Tick({
         if ($script:rebootRequired) {
             [System.Windows.Forms.MessageBox]::Show("Uma ou mais tarefas requerem que o computador seja reiniciado para aplicar as alteracoes.", "Reinicializacao Necessaria", "OK", "Warning")
         }
+		Update-Status "Atualizando a lista de Recursos do Windows..."
+        Check-WindowsFeaturesStatus
 
         Remove-Job $script:executionJob -Force
-        $script:executionJob = $null
-    }
+        $script:executionJob = $null    }
 })
 
 $form.Add_FormClosing({
@@ -2384,32 +2415,9 @@ $regCleanerListView.Add_ItemChecked({
     $regCleanerSummaryLabel.Text = "Total de itens selecionados: $count"
 })
 
-$featuresSearchBox.Add_TextChanged({
-    param($sender, $e)
-    $searchText = $sender.Text
-    if ($null -eq $script:cachedWindowsFeatures) { return }
+# --- Associacao de Eventos ---
 
-    $windowsFeaturesListView.BeginUpdate()
-    $windowsFeaturesListView.Items.Clear()
-
-    $filteredFeatures = $script:cachedWindowsFeatures | Where-Object { $_.DisplayName -like "*$searchText*" }
-    
-    foreach ($feature in $filteredFeatures) {
-        $item = New-Object System.Windows.Forms.ListViewItem($feature.DisplayName)
-        $item.SubItems.Add([string]$feature.State) | Out-Null
-        $item.Tag = $feature.FeatureName
-        
-        if ($feature.State -eq 'Enabled') {
-            $item.ForeColor = [System.Drawing.Color]::LightGreen
-            $item.Checked = $false 
-        } else {
-            $item.ForeColor = [System.Drawing.Color]::Salmon
-        }
-        $windowsFeaturesListView.Items.Add($item) | Out-Null
-    }
-    $windowsFeaturesListView.EndUpdate()
-})
-
+# Evento para o timer que dispara as analises iniciais
 $script:initialScanTimer.Add_Tick({
     $script:initialScanTimer.Stop()
     try {
@@ -2427,6 +2435,104 @@ $script:initialScanTimer.Add_Tick({
     }
 })
 
+# Evento para o timer que monitora o progresso da execucao em segundo plano
+$script:progressTimer.Add_Tick({
+    if (-not $script:executionJob) {
+        $script:progressTimer.Stop()
+        return
+    }
+
+    $messages = Receive-Job $script:executionJob
+    if ($messages) {
+        foreach ($msg in $messages) {
+            if ($msg -isnot [string]) { continue }
+            
+            if ($msg.StartsWith("PROGRESS:")) {
+                $parts = $msg.Split(":")
+                $percent = [int]$parts[1]; $taskName = $parts[2]
+                Update-Status "[$percent%] Executando: $taskName..."
+                if ($script:loadingOverlay -and $script:loadingOverlay.IsHandleCreated) {
+                    $script:loadingOverlay.Controls[0].Text = "Executando: $taskName..."
+                }
+            }
+            elseif ($msg.StartsWith("LOG:")) {
+                Update-Status $msg.Substring(4)
+            }
+        }
+    }
+
+    if ($script:executionJob.State -in @('Completed', 'Failed', 'Stopped')) {
+        $script:progressTimer.Stop()
+        $allFinalOutput = (Get-Job -Id $script:executionJob.Id).ChildJobs[0].Output
+        $finalMessage = $allFinalOutput | Where-Object { $_ -like "COMPLETE:*" } | Select-Object -Last 1
+        $anyTaskFailed = $false
+        if ($finalMessage -and ($finalMessage.ToString().Split(":")[1] -eq 'True')) {
+            $anyTaskFailed = $true
+        }
+        $rebootMessage = $allFinalOutput | Where-Object { $_ -like "REBOOT_REQUIRED:*" } | Select-Object -Last 1
+        if ($rebootMessage -and ($rebootMessage.ToString().Split(":")[1] -eq 'True')) {
+            $script:rebootRequired = $true
+        }
+
+        if ($script:loadingOverlay -and $script:loadingOverlay.IsHandleCreated) {
+            $script:loadingOverlay.Close(); $script:loadingOverlay.Dispose()
+        }
+        $script:controlsToToggle.ForEach({ if ($_.IsHandleCreated) { $_.Enabled = $true } })
+
+		if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
+
+        if ($script:dismRepairSuggested) {
+            [System.Windows.Forms.MessageBox]::Show("O Windows nao encontrou os arquivos para instalar/alterar um ou mais recursos.`n`nRecomenda-se executar 'Reparar Imagem do Windows (DISM)' e 'Verificar Integridade do Sistema (SFC)'.", "Sugestao de Reparo", "OK", "Information")
+        }
+        if ($script:rebootRequired) {
+            [System.Windows.Forms.MessageBox]::Show("Uma ou mais tarefas requerem que o computador seja reiniciado para aplicar as alteracoes.", "Reinicializacao Necessaria", "OK", "Warning")
+        }
+		Update-Status "Atualizando a lista de Recursos do Windows..."
+        Check-WindowsFeaturesStatus
+
+        Remove-Job $script:executionJob -Force
+        $script:executionJob = $null
+    }
+})
+
+# --- Eventos dos Controles da Interface ---
+
+$form.Add_FormClosing({
+    $script:stopLogJob = $true
+    if ($script:logJob) {
+        Stop-Job $script:logJob
+        Remove-Job $script:logJob -Force
+    }
+})
+
+$appsTreeView.Add_AfterCheck({
+    param($sender, $e)
+    if ($script:isUpdatingChecks) { return }
+    try {
+        $script:isUpdatingChecks = $true
+        $currentNode = $e.Node
+        if ($currentNode.Nodes.Count -gt 0) {
+            foreach ($childNode in $currentNode.Nodes) { $childNode.Checked = $currentNode.Checked }
+        }
+        if ($currentNode.Parent -ne $null) {
+            $allSiblingsChecked = $true
+            foreach ($siblingNode in $currentNode.Parent.Nodes) {
+                if (-not $siblingNode.Checked) { $allSiblingsChecked = $false; break }
+            }
+            $currentNode.Parent.Checked = $allSiblingsChecked
+        }
+    }
+    finally { $script:isUpdatingChecks = $false }
+})
+
+$closeButtonMain.Add_Click({ $form.Close() })
+$clearLogButton.Add_Click({ $statusBox.Clear() })
+$runAllButton.Add_Click({ Start-Execution -AllTabs })
+$runCurrentTabButton.Add_Click({ Start-Execution })
+
+# Eventos da Aba de Limpeza
+$filesPanel.AnalyzeButton.Add_Click({ Analyze-CleanableFiles })
+$filesPanel.CleanButton.Add_Click({ Clean-SelectedFiles })
 $filesPanel.Control.Add_AfterCheck({
     param($sender, $e)
     if ($script:isUpdatingChecks) { return }
@@ -2458,17 +2564,51 @@ $filesPanel.Control.Add_AfterCheck({
     }
     finally { $script:isUpdatingChecks = $false }
 })
+$analyzeRegButton.Add_Click({ Analyze-RegistryIssues })
+$backupRegButton.Add_Click({ Backup-SelectedRegistryIssues })
+$cleanRegButton.Add_Click({ Clean-SelectedRegistryIssues })
+$regCleanerListView.Add_ItemChecked({
+    param($sender, $e)
+    $count = $this.CheckedItems.Count
+    $regCleanerSummaryLabel.Text = "Total de itens selecionados: $count"
+})
+
+# Eventos da Aba de Softwares
+$scanChocoButton.Add_Click({ Scan-OutdatedChocoApps })
+$updateChocoButton.Add_Click({ Update-SelectedChocoApps })
+$scanRegButton.Add_Click({ Scan-RegistryApps })
+$uninstallRegButton.Add_Click({ Uninstall-SelectedApps })
 $regUpdatesListView.Add_ItemChecked({ $uninstallRegButton.Enabled = ($this.CheckedItems.Count -gt 0) })
 $regUpdatesListView.Add_SelectedIndexChanged({ $searchForUpdateButton.Enabled = ($this.SelectedItems.Count -gt 0) })
 $searchForUpdateButton.Add_Click({
     if ($regUpdatesListView.SelectedItems.Count -gt 0) {
-        $appName = $regUpdatesListView.SelectedItems[0].SubItems[2].Text # Coluna 2 e o Nome
+        $appName = $regUpdatesListView.SelectedItems[0].SubItems[2].Text
         if (-not [string]::IsNullOrWhiteSpace($appName)) {
             $encodedAppName = [System.Web.HttpUtility]::UrlEncode("$appName download da ultima versao")
             Start-Process "https://www.google.com/search?q=$encodedAppName"
         }
     }
 })
+$regSearchBox.Add_TextChanged({
+    param($sender, $e)
+    $searchText = $sender.Text
+    if ($null -eq $script:cachedInstalledApps) { return }
+    $regUpdatesListView.BeginUpdate()
+    $regUpdatesListView.Items.Clear()
+    $filteredApps = $script:cachedInstalledApps.Values | Where-Object { $_.Name -like "*$searchText*" } | Sort-Object Name
+    $i = 1
+    foreach ($app in $filteredApps) {
+        $item = New-Object System.Windows.Forms.ListViewItem($app.Origin)
+        $item.SubItems.Add($i.ToString()); $item.SubItems.Add($app.Name); $item.SubItems.Add($(if ($app.Version) { $app.Version } else { "N/D" })); $item.SubItems.Add($(if ($app.Publisher) { $app.Publisher } else { "N/D" })); $item.Tag = $app.UninstallString
+        $regUpdatesListView.Items.Add($item) | Out-Null
+        $i++
+    }
+    $regUpdatesListView.EndUpdate()
+})
+
+# Eventos da Aba de Otimização e Bloatware
+$bloatwarePanel.AnalyzeButton.Add_Click({ Analyze-Bloatware })
+$bloatwarePanel.CleanButton.Add_Click({ Apply-BloatwareActions })
 $bloatwarePanel.Control.Add_ItemCheck({ param($sender, $e)
     $item = $this.Items[$e.Index]
     $actionInfo = $item.Tag
@@ -2482,8 +2622,28 @@ $bloatwarePanel.Control.Add_ItemCheck({ param($sender, $e)
         elseif ($actionInfo.Action -eq 'Install') { $item.ForeColor = [System.Drawing.Color]::DarkGray }
     }
 })
+
+# Eventos da Aba de Recursos do Windows
+$featuresSearchBox.Add_TextChanged({
+    param($sender, $e)
+    $searchText = $sender.Text
+    if ($null -eq $script:cachedWindowsFeatures) { return }
+    $windowsFeaturesListView.BeginUpdate()
+    $windowsFeaturesListView.Items.Clear()
+    $filteredFeatures = $script:cachedWindowsFeatures | Where-Object { $_.FeatureName -like "*$searchText*" }
+    foreach ($feature in $filteredFeatures) {
+        $item = New-Object System.Windows.Forms.ListViewItem($feature.FeatureName)
+        $item.SubItems.Add($feature.State) | Out-Null
+        $item.Tag = $feature.FeatureName
+        if ($feature.State -eq 'Enabled') { $item.ForeColor = [System.Drawing.Color]::LightGreen; $item.Checked = $false } else { $item.ForeColor = [System.Drawing.Color]::Salmon }
+        $windowsFeaturesListView.Items.Add($item) | Out-Null
+    }
+    $windowsFeaturesListView.EndUpdate()
+})
+
+# Evento da troca de Abas
 $tabControl.Add_SelectedIndexChanged({
-    $runnableTabs = @("Sistema e Manutencao", "(ALPHA) Recursos do Windows", "Personalizacao", "Softwares", "Otimizacao e Bloatware", "Endpoint Security")
+    $runnableTabs = @("Sistema e Manutencao", "(BETA) Recursos do Windows", "Personalizacao", "Softwares", "Otimizacao e Bloatware", "Endpoint Security")
     $runCurrentTabButton.Enabled = $tabControl.SelectedTab.Text -in $runnableTabs
     if (($tabControl.SelectedTab.Text -eq "Limpeza de Arquivos e Registros") -and (-not $script:cleanupTabHasBeenAnalyzed)) {
         Update-Status "Executando analise inicial da aba de limpeza..."
@@ -2502,7 +2662,7 @@ $form.Add_Shown({
         $webClient = New-Object System.Net.WebClient
         $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
         $imageData = $webClient.DownloadData($script:config.LogoUrl)
-        $memoryStream = New-Object System.IO.MemoryStream(,$imageData)        
+		$memoryStream = [System.IO.MemoryStream]::new($imageData)
         $titleIcon.Image = [System.Drawing.Image]::FromStream($memoryStream)
         Update-Status "Icone carregado com sucesso."
     } catch {

@@ -803,24 +803,19 @@ function Configure-System-Wallpaper {
     Update-Status "--> Verificando conexao com a internet..."
     Test-NetConnectionSafe
     
-    # Define um local permanente para os wallpapers na pasta de Imagens do usuario
     $permanentWpPath = Join-Path ([Environment]::GetFolderPath('MyPictures')) "AZCorp Wallpapers"
-    # Garante que a pasta exista
-    if (-not (Test-Path $permanentWpPath)) {
-        New-Item -Path $permanentWpPath -ItemType Directory -Force | Out-Null
-    }
+    if (-not (Test-Path $permanentWpPath)) { New-Item -Path $permanentWpPath -ItemType Directory -Force | Out-Null }
     
     $tempThumbDir = Join-Path $env:TEMP "WallpaperThumbs_$(Get-Random)"
     New-Item -Path $tempThumbDir -ItemType Directory -Force | Out-Null
     
     try {
         $imageLinks = Get-Image-List-From-Url -Url $script:config.WallpapersUrl
-        if ($imageLinks.Count -eq 0) { throw "Nenhum wallpaper foi encontrado no diretorio online." }
+        if ($imageLinks.Count -eq 0) { throw "Nenhum wallpaper foi encontrado." }
         
         $selectionForm = New-Object System.Windows.Forms.Form; $selectionForm.Text = "Selecione o Wallpaper (Clique na Imagem)"; $selectionForm.Size = New-Object System.Drawing.Size(640, 520); $selectionForm.StartPosition = "CenterParent"
         $flowLayoutPanel = New-Object System.Windows.Forms.FlowLayoutPanel; $flowLayoutPanel.Dock = "Fill"; $flowLayoutPanel.AutoScroll = $true
         $okButton = New-Object System.Windows.Forms.Button; $okButton.Text = "Aplicar Wallpaper Selecionado"; $okButton.Dock = "Bottom"
-        
         $script:selectedWallpaperGroup = $null
         
         foreach ($imageFile in $imageLinks) { 
@@ -834,67 +829,88 @@ function Configure-System-Wallpaper {
                 $memoryStream = [System.IO.MemoryStream]::new($imageBytes)
                 $groupBox = New-Object System.Windows.Forms.GroupBox; $groupBox.Size = New-Object System.Drawing.Size(180, 140); $groupBox.Tag = $filename; $groupBox.Text = ($filename -replace '\.(png|jpg|jpeg|bmp|gif|webp)$', '') -replace '[-_]', ' '
                 $pictureBox = New-Object System.Windows.Forms.PictureBox; $pictureBox.Dock = "Fill"; $pictureBox.SizeMode = "Zoom"; $pictureBox.Image = [System.Drawing.Image]::FromStream($memoryStream)
-                
                 $onClick = {
                     param($sender, $e)
-                    $clickedControl = $sender
-                    $clickedGroup = if ($clickedControl -is [System.Windows.Forms.GroupBox]) { $clickedControl } else { $clickedControl.Parent }
+                    $clickedControl = $sender; $clickedGroup = if ($clickedControl -is [System.Windows.Forms.GroupBox]) { $clickedControl } else { $clickedControl.Parent }
                     if ($script:selectedWallpaperGroup) { $script:selectedWallpaperGroup.ForeColor = $script:themeColors.Foreground }
-                    $clickedGroup.ForeColor = $script:themeColors.Accent
-                    $script:selectedWallpaperGroup = $clickedGroup
+                    $clickedGroup.ForeColor = $script:themeColors.Accent; $script:selectedWallpaperGroup = $clickedGroup
                 }
-                
                 $groupBox.Add_Click($onClick); $pictureBox.Add_Click($onClick)
                 $groupBox.Controls.Add($pictureBox); $flowLayoutPanel.Controls.Add($groupBox) 
-            } catch {
-                Update-Status "AVISO: Falha ao carregar a miniatura para '$filename'. Pulando..."
-                continue
-            }
+            } catch { Update-Status "AVISO: Falha ao carregar a miniatura para '$filename'. Pulando..." }
         }
         
         if ($flowLayoutPanel.Controls.Count -eq 0) { throw "Nenhuma imagem pode ser carregada para selecao." }
-        
         $firstGroup = $flowLayoutPanel.Controls[0]; $firstGroup.ForeColor = $script:themeColors.Accent; $script:selectedWallpaperGroup = $firstGroup
         $okButton.Add_Click({ $selectionForm.DialogResult = [System.Windows.Forms.DialogResult]::OK; $selectionForm.Close() })
-        $selectionForm.Controls.AddRange(@($flowLayoutPanel, $okButton))
-        $result = $selectionForm.ShowDialog()
-        $selectionForm.Dispose()
+        $selectionForm.Controls.AddRange(@($flowLayoutPanel, $okButton)); $result = $selectionForm.ShowDialog(); $selectionForm.Dispose()
         
         if ($result -ne [System.Windows.Forms.DialogResult]::OK) { return "CANCELADO" }
-        
         $selectedFilename = $script:selectedWallpaperGroup.Tag
         if (-not $selectedFilename) { return "CANCELADO" }
         
-        Update-Status "--> Aplicando o wallpaper selecionado..."
+        Update-Status "--> Aplicando o wallpaper selecionado via processo isolado..."
         $finalImageUrl = "$($script:config.WallpapersUrl.TrimEnd('/'))/$([System.Web.HttpUtility]::UrlPathEncode($selectedFilename))"
-        
-        # O caminho de download agora e a pasta permanente
         $downloadedImagePath = Join-Path $permanentWpPath $selectedFilename
-        
         Download-File-Robust -Url $finalImageUrl -OutFile $downloadedImagePath -RefererUrl $script:config.WallpapersUrl
         $bmpPath = [System.IO.Path]::ChangeExtension($downloadedImagePath, ".bmp")
-        
-        $image = [System.Drawing.Image]::FromFile($downloadedImagePath)
-        $image.Save($bmpPath, [System.Drawing.Imaging.ImageFormat]::Bmp)
-        $image.Dispose()
+        $workerScriptPath = $null
+        try {
+            $image = [System.Drawing.Image]::FromFile($downloadedImagePath); $image.Save($bmpPath, [System.Drawing.Imaging.ImageFormat]::Bmp); $image.Dispose()
 
-        # Agora usamos o caminho PERMANENTE do arquivo BMP
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name Wallpaper -Value $bmpPath
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name WallpaperStyle -Value 2
-        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name TileWallpaper -Value 0
-        
-        RUNDLL32.EXE USER32.DLL,UpdatePerUserSystemParameters 1, True
-        
-        # Remove apenas o arquivo de download original (ex: .png), mantem o .bmp que esta em uso.
-        if (Test-Path $downloadedImagePath) { Remove-Item -Path $downloadedImagePath -Force -ErrorAction SilentlyContinue }
-        
-        Update-Status "--> Wallpaper atualizado com sucesso!"
+            # ESTE E O 'MINI-SCRIPT' MAIS COMPLETO E AGRESSIVO POSSIVEL
+            $workerScriptContent = @'
+            param([string]$ImagePath)
+            
+            try {
+                $themesPath = "$env:APPDATA\Microsoft\Windows\Themes"
+                $transcodedPath = Join-Path $themesPath "TranscodedWallpaper"
+                $regPath = 'HKCU:\Control Panel\Desktop'
+                $regName = 'Wallpaper'
+                
+                # 1. Ataque Duplo: Edita o registro E substitui o arquivo de cache do Windows
+                Set-ItemProperty -Path $regPath -Name $regName -Value $ImagePath
+                Set-ItemProperty -Path $regPath -Name WallpaperStyle -Value 2
+                Set-ItemProperty -Path $regPath -Name TileWallpaper -Value 0
+                Copy-Item -Path $ImagePath -Destination $transcodedPath -Force -ErrorAction SilentlyContinue
+                
+                # 2. Forca o Explorer a reiniciar
+                Stop-Process -Name explorer -Force
+                
+                # 3. VERIFICACAO: Espera o Explorer voltar e confere se a mudanca 'pegou'
+                Start-Sleep -Seconds 5 
+                $currentWallpaper = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+                
+                if ($currentWallpaper -and $currentWallpaper.Wallpaper -eq $ImagePath) {
+                    exit 0 # Sucesso Verificado
+                } else {
+                    exit 1 # Falha na Verificacao
+                }
+            } catch {
+                exit 1 # Qualquer outro erro tambem e falha
+            }
+'@
+            $workerScriptPath = Join-Path $env:TEMP "set_wallpaper_worker.ps1"
+            $workerScriptContent | Out-File -FilePath $workerScriptPath -Encoding utf8
+
+            Update-Status "--> Disparando processo 'operario' com verificacao..."
+            $process = Start-Process powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$workerScriptPath`" -ImagePath `"$bmpPath`"" -WindowStyle Hidden -Wait -PassThru
+            
+            # LOG MELHORADO: O sucesso agora depende do resultado da verificacao
+            if ($process.ExitCode -eq 0) {
+                Update-Status "--> SUCESSO VERIFICADO: Wallpaper atualizado com sucesso no registro."
+            } else {
+                throw "FALHA NA VERIFICAÇÃO: O script foi executado, mas a alteração no registro não foi confirmada. O ambiente Windows está bloqueando a mudança."
+            }
+
+        } finally {
+            if (Test-Path $downloadedImagePath) { Remove-Item -Path $downloadedImagePath -Force -EA SilentlyContinue }
+            # O arquivo BMP nao e mais apagado, pois esta em uso pelo sistema
+            if ($workerScriptPath -and (Test-Path $workerScriptPath)) { Remove-Item -Path $workerScriptPath -Force -EA SilentlyContinue }
+        }
 
     } finally {
-        # A limpeza final agora so apaga a pasta de miniaturas.
-        if (Test-Path $tempThumbDir) {
-            Remove-Item -Path $tempThumbDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        if (Test-Path $tempThumbDir) { Remove-Item -Path $tempThumbDir -Recurse -Force -EA SilentlyContinue }
     }
 }
 function Configure-Teams-Backgrounds {
@@ -2249,7 +2265,7 @@ $systemTasks = [ordered]@{
 $personalizationTasks = [ordered]@{
     "Configurar Tema e Barra de Tarefas"       = { Configure-System-ThemeAndTaskbar }
     "Configurar Wallpaper do Windows (com Selecao)" = @{ Action = { Configure-System-Wallpaper }; Interactive = $true }
-    "Instalar Fundos do Microsoft Teams (Ainda nao legal pro teams novo)"  = @{ Action = { Configure-Teams-Backgrounds }; Interactive = $true }
+    "Instalar Fundos do Microsoft Teams (AINDA NAO FUNCIONA)"  = @{ Action = { Configure-Teams-Backgrounds }; Interactive = $true }
 }
 
 $debloatTasks = [ordered]@{

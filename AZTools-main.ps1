@@ -1648,19 +1648,64 @@ function Uninstall-SelectedApps {
     foreach ($item in $toUninstall) { 
         $appName = $item.SubItems[2].Text
         $unStr = $item.Tag
+        
         Run-Task "Desinstalar $appName" { 
-            # ... (logica interna de desinstalacao, que ja esta correta) ...
+    if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }
+
+    # --- LOGICA DE DESINSTALACAO COMPLETAMENTE REVISADA ---
+    $cmd = ""; $args = "";
+    $uninstallString = $unStr.Trim('"')
+
+    # 1. Trata o caso especifico do Chocolatey PRIMEIRO
+    if ($uninstallString -match '^(?i)choco uninstall') {
+        $cmd = "$env:ProgramData\chocolatey\bin\choco.exe"
+        # Pega o nome do pacote da string original
+        $packageName = $uninstallString.Split(' ')[-1]
+        # Monta o argumento com -y para confirmacao automatica
+        $args = "uninstall $packageName -y"
+        
+        Update-Status "... Executando (Choco): `"$cmd`" $args"
+        Start-Process -FilePath $cmd -ArgumentList $args -Wait -WindowStyle Hidden -ErrorAction Stop
+
+    } 
+    # 2. Se nao for Choco, continua com a logica para .exe e msiexec
+    else {
+        # Trata o caso do MsiExec.exe
+        if ($uninstallString -match '^(?i)MsiExec.exe') {
+            $cmd = "msiexec.exe"
+            $args = $uninstallString.Substring(11).Trim()
+        } 
+        # Trata o caso de um .exe entre aspas
+        elseif ($uninstallString -match '^"([^"]+\.exe)"') {
+            $cmd = $matches[1]
+            $args = $uninstallString.Substring($matches[0].Length).Trim()
         }
+        # Trata o caso de um .exe sem aspas
+        elseif ($uninstallString -match '^([^"]+\.exe)') {
+            $cmd = $matches[1]
+            $args = $uninstallString.Substring($cmd.Length).Trim()
+        }
+        else {
+            throw "Nao foi possivel interpretar a string de desinstalacao: $uninstallString"
+        }
+        
+        # Adiciona parametros silenciosos para .exe e msiexec
+        $silentArgs = ""
+        if ($cmd -match 'msiexec' -and $args -notmatch '(/qn|/quiet)') {
+            $args = $args.Replace("/I", "/X").Trim()
+            $silentArgs = "/qn /norestart"
+        } elseif ($cmd -notmatch 'msiexec' -and $args -notmatch '(/S|/silent|/quiet)') {
+            $silentArgs = "/S"
+        }
+        
+        $finalArgs = "$args $silentArgs".Trim()
+        Update-Status "... Executando: `"$cmd`" $finalArgs"
+        Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -ErrorAction Stop
     }
-
-    # Chama a funcao de atualizacao completa
-    Refresh-AppLists
-
-    # Reinicia e retoma o timer de inatividade
-    Update-Status "Reiniciando temporizador de inatividade..."
-    $resetShutdownTimer.Invoke()
-    $script:shutdownTimer.Start()
+	}
+	}
 }
+
 function Refresh-AppLists {
     Update-Status "Execucao finalizada. Atualizando listas de aplicativos..."
     Run-Task "Atualizando lista de apps desatualizados (Choco)" { Scan-OutdatedChocoApps }
@@ -1790,6 +1835,10 @@ function Populate-AppsTreeView {
     $appsTreeView.Nodes.AddRange(@($recomm, $optional, $shortcuts))
     $appsTreeView.ExpandAll()
     $appsTreeView.EndUpdate()
+	
+	if ($appsTreeView.Nodes.Count -gt 0) {
+    $appsTreeView.Nodes[0].EnsureVisible()
+}
 }
 
 function Populate-GodModeList { $script:godModeItems = @(); $path = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\ControlPanel\NameSpace"; Get-ChildItem $path -EA SilentlyContinue | % { $name = (Get-ItemProperty -Path $_.PSPath -Name '(default)' -EA SilentlyContinue).'(default)'; $cmd = "explorer.exe shell:::$($_.PSChildName)"; if (-not [string]::IsNullOrWhiteSpace($name)) { $script:godModeItems += @{ Name = $name; Command = $cmd } } }; $script:godModeItems = $script:godModeItems | Sort-Object Name; $godModeListView.Items.Clear(); $script:godModeItems.ForEach({ $item = New-Object System.Windows.Forms.ListViewItem($_.Name); $item.SubItems.Add($_.Command) | Out-Null; $godModeListView.Items.Add($item) | Out-Null }); $godModeListView.AutoResizeColumns(1); $godModeListView.Add_MouseDoubleClick({ if ($this.SelectedItems.Count -gt 0) { $cmd = $this.SelectedItems[0].SubItems[1].Text; try { $parts = $cmd -split ' ', 2; $exe = $parts[0]; $args = if ($parts.Count -gt 1) { $parts[1] } else { "" }; Start-Process -FilePath $exe -ArgumentList $args } catch {} } }); $godModeSearchBox.Add_TextChanged({ $text = $this.Text; $godModeListView.BeginUpdate(); $godModeListView.Items.Clear(); $script:godModeItems | ? { $_.Name -like "*$text*" } | % { $item = New-Object System.Windows.Forms.ListViewItem($_.Name); $item.SubItems.Add($_.Command) | Out-Null; $godModeListView.Items.Add($item) | Out-Null }; $godModeListView.EndUpdate() }) }

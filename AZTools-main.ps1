@@ -1071,7 +1071,6 @@ function Install-App($appInfo) {
             Update-Status "AVISO: Nao foi possivel encontrar o executavel '$($appInfo.Executable)' para iniciar o aplicativo automaticamente."
         }
     }
-}
 
 
 function Install-Softphone {

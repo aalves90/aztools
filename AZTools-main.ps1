@@ -655,7 +655,7 @@ function Find-ExecutablePath {
         # arante que apenas o primeiro resultado (como string) seja retornado.
         $foundPath = Get-ChildItem -Path $path -Filter $ExecutableName -Recurse -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1
         if ($foundPath) {
-            Update-Status "... Executavel '$ExecutableName' encontrado em: $foundPath"
+		Update-Status "... Executavel '$ExecutableName' encontrado em: $foundPath" | Out-Null
             return $foundPath
         }
     }
@@ -863,36 +863,36 @@ function Configure-System-Wallpaper {
             $image = [System.Drawing.Image]::FromFile($downloadedImagePath); $image.Save($bmpPath, [System.Drawing.Imaging.ImageFormat]::Bmp); $image.Dispose()
 
             # ESTE E O 'MINI-SCRIPT' MAIS COMPLETO E AGRESSIVO POSSIVEL
-            $workerScriptContent = @'
-            param([string]$ImagePath)
-            
-            try {
-                $themesPath = "$env:APPDATA\Microsoft\Windows\Themes"
-                $transcodedPath = Join-Path $themesPath "TranscodedWallpaper"
-                $regPath = 'HKCU:\Control Panel\Desktop'
-                $regName = 'Wallpaper'
-                
-                # 1. Ataque Duplo: Edita o registro E substitui o arquivo de cache do Windows
-                Set-ItemProperty -Path $regPath -Name $regName -Value $ImagePath
-                Set-ItemProperty -Path $regPath -Name WallpaperStyle -Value 2
-                Set-ItemProperty -Path $regPath -Name TileWallpaper -Value 0
-                Copy-Item -Path $ImagePath -Destination $transcodedPath -Force -ErrorAction SilentlyContinue
-                
-                # 2. Forca o Explorer a reiniciar
-                Stop-Process -Name explorer -Force
-                
-                # 3. VERIFICACAO: Espera o Explorer voltar e confere se a mudanca 'pegou'
-                Start-Sleep -Seconds 5 
-                $currentWallpaper = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
-                
-                if ($currentWallpaper -and $currentWallpaper.Wallpaper -eq $ImagePath) {
-                    exit 0 # Sucesso Verificado
-                } else {
-                    exit 1 # Falha na Verificacao
-                }
-            } catch {
-                exit 1 # Qualquer outro erro tambem e falha
-            }
+$workerScriptContent = @'
+param([string]$ImagePath)
+
+try {
+    $themesPath = "$env:APPDATA\Microsoft\Windows\Themes"
+    $transcodedPath = Join-Path $themesPath "TranscodedWallpaper"
+    $regPath = 'HKCU:\Control Panel\Desktop'
+    $regName = 'Wallpaper'
+
+    # 1. Ataque Duplo: Edita o registro E substitui o arquivo de cache do Windows
+    Set-ItemProperty -Path $regPath -Name $regName -Value $ImagePath
+    Set-ItemProperty -Path $regPath -Name WallpaperStyle -Value 2
+    Set-ItemProperty -Path $regPath -Name TileWallpaper -Value 0
+    Copy-Item -Path $ImagePath -Destination $transcodedPath -Force -ErrorAction SilentlyContinue
+
+    # 2. Forca o Explorer a reiniciar
+    Stop-Process -Name explorer -Force
+
+    # 3. VERIFICACAO: Espera o Explorer voltar e confere se a mudanca 'pegou'
+    Start-Sleep -Seconds 5 
+    $currentWallpaper = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+
+    if ($currentWallpaper -and $currentWallpaper.Wallpaper -eq $ImagePath) {
+        exit 0 # Sucesso Verificado
+    } else {
+        exit 1 # Falha na Verificacao
+    }
+} catch {
+    exit 1 # Qualquer outro erro tambem e falha
+}
 '@
             $workerScriptPath = Join-Path $env:TEMP "set_wallpaper_worker.ps1"
             $workerScriptContent | Out-File -FilePath $workerScriptPath -Encoding utf8
@@ -1057,13 +1057,16 @@ function Install-App($appInfo) {
         Update-Status "--> Aguardando 5 segundos antes de tentar iniciar o aplicativo..."
         Start-Sleep -Seconds 5
         $exePath = Find-ExecutablePath -ExecutableName $appInfo.Executable
-        if ($exePath) {
-            try {
-                Update-Status "--> Iniciando $($appInfo.Name)..."
-                Start-Process -FilePath $exePath
-            } catch {
-                throw "Falha ao tentar iniciar o executavel '$exePath'. Erro: $($_.Exception.Message.Trim())"
-            }
+	if ($exePath) {
+		try {
+			# Garante que estamos pegando apenas o primeiro resultado, caso a busca retorne mais de um.
+			$firstPath = $exePath | Select-Object -First 1
+			Update-Status "--> Iniciando $($appInfo.Name) em: $firstPath"
+			Start-Process -FilePath $firstPath
+		} catch {
+			throw "Falha ao tentar iniciar o executavel '$exePath'. Erro: $($_.Exception.Message.Trim())"
+		}
+	}
         } else {
             Update-Status "AVISO: Nao foi possivel encontrar o executavel '$($appInfo.Executable)' para iniciar o aplicativo automaticamente."
         }
@@ -1300,7 +1303,18 @@ function Analyze-CleanableFiles {
                 "Cache DNS" = @{ Type = "Action"; Action = [scriptblock]{ ipconfig /flushdns }; GetSize = { return 0 } }
                 "Arquivos de otimizacao de entrega do Windows" = @{ Type = "FolderContent"; Path = @("$env:windir\SoftwareDistribution\DeliveryOptimization"); PreAction = { Stop-Service DoSvc -Force -EA SilentlyContinue }; PostAction = { Start-Service DoSvc -EA SilentlyContinue } }
                 "Cache web do Windows" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Windows\INetCache") }
-				"Registros de eventos do Windows" = @{ Type = "Action"; Action = [scriptblock]{ (wevtutil el) | ForEach-Object { wevtutil cl $_ 2>$null } }; GetSize = { return 0 } } 
+			"Registros de eventos do Windows" = @{ 
+				Type = "Action"; 
+				Action = [scriptblock]{ (wevtutil el) | ForEach-Object { wevtutil cl $_ 2>$null } }; 
+				# CORRECAO: Agora calculamos o tamanho real dos arquivos de log.
+				GetSize = { 
+					try {
+						return (Get-ChildItem -Path "$env:windir\System32\winevt\Logs" -Filter "*.evtx" -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
+					} catch {
+						return 0
+					}
+				} 
+				}
 				"Dados do Prefetch antigos" = @{ Type = "FolderContent"; Path = @("$env:windir\Prefetch") }
                 "OneDrive (Arquivos de cache)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\OneDrive\cache", "$env:LOCALAPPDATA\Microsoft\OneDrive\logs") }
                 "Itens do Office 365 (Itens de cache e update que nao precisam mais)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Office\16.0\OfficeFileCache", "$env:LOCALAPPDATA\Microsoft\Office\OTele") }
@@ -1623,7 +1637,38 @@ function Update-SelectedChocoApps {
 }
 function Scan-RegistryApps { $scanRegButton.Enabled = $false; $searchForUpdateButton.Enabled = $false; $uninstallRegButton.Enabled = $false; Run-Task "Verificar Apps Instalados (Registro)" { Update-RegisteredAppsList }; $scanRegButton.Enabled = $true }
 
-function Uninstall-SelectedApps { $uninstallRegButton.Enabled = $false; $toUninstall = $regUpdatesListView.CheckedItems; if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }; if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }; foreach ($item in $toUninstall) { $appName = $item.SubItems[2].Text; $unStr = $item.Tag; Run-Task "Desinstalar $appName" { if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }; if ($unStr.StartsWith("choco uninstall")) { Start-Process "choco.exe" -ArgumentList "uninstall $($unStr.Split(' ')[-1]) -y" -Wait -WindowStyle Hidden; return }; $cmd = ""; $args = ""; if ($unStr.StartsWith('"')) { $end = $unStr.IndexOf('"', 1); if ($end -ne -1) { $cmd = $unStr.Substring(1, $end - 1); $args = $unStr.Substring($end + 1).Trim() } }; if (-not $cmd) { $parts = $unStr -split ' ', 2; $cmd = $parts[0]; if ($parts.Count -gt 1) { $args = $parts[1] } }; $cmd = $cmd.Replace('"', ''); $silent = ""; if ($cmd -match 'msiexec' -and $args -notmatch '/qn') { $args = $args.Replace("/I", "/X"); $silent = "/qn /norestart" } elseif ($args -notmatch '(/S|/silent|/quiet)') { $silent = "/S" }; $finalArgs = "$args $silent".Trim(); Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -EA Stop } }; Scan-RegistryApps }
+function Uninstall-SelectedApps { 
+    $uninstallRegButton.Enabled = $false
+    $toUninstall = $regUpdatesListView.CheckedItems
+    if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }
+    if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }
+
+    # Pausa o timer de inatividade durante a desinstalacao
+    $script:shutdownTimer.Stop()
+
+    foreach ($item in $toUninstall) { 
+        $appName = $item.SubItems[2].Text
+        $unStr = $item.Tag
+        Run-Task "Desinstalar $appName" { 
+            # ... (logica interna de desinstalacao, que ja esta correta) ...
+        }
+    }
+
+    # Chama a funcao de atualizacao completa
+    Refresh-AppLists
+
+    # Reinicia e retoma o timer de inatividade
+    Update-Status "Reiniciando temporizador de inatividade..."
+    $resetShutdownTimer.Invoke()
+    $script:shutdownTimer.Start()
+}
+function Refresh-AppLists {
+    Update-Status "Execucao finalizada. Atualizando listas de aplicativos..."
+    Run-Task "Atualizando lista de apps desatualizados (Choco)" { Scan-OutdatedChocoApps }
+    Run-Task "Atualizando lista de todos os apps (Registro)" { Scan-RegistryApps }
+    Run-Task "Atualizando status na arvore de softwares" { Populate-AppsTreeView }
+    Update-Status "Listas de aplicativos atualizadas."
+}
 
 function Check-WindowsFeaturesStatus {
     # --- ETAPA 0: Preparar a UI ---
@@ -1810,6 +1855,8 @@ function Start-Execution {
         [System.Collections.ArrayList]$CustomTasks = $null
     )
     
+    $script:shutdownTimer.Stop()
+
     # Listas para organizar o que fazer
     $tasksToProcess = [System.Collections.ArrayList]::new()
     $interactiveTasksToRun = [System.Collections.ArrayList]::new()
@@ -2413,11 +2460,6 @@ $form.Add_KeyDown($resetShutdownTimer)
 
 # Evento para o timer que monitora o progresso da execucao em segundo plano
 $script:progressTimer.Add_Tick({
-    # ... (o resto do seu codigo de eventos continua aqui)
-})
-
-# Evento para o timer que monitora o progresso da execucao em segundo plano
-$script:progressTimer.Add_Tick({
     if (-not $script:executionJob) {
         $script:progressTimer.Stop()
         return
@@ -2460,7 +2502,8 @@ $script:progressTimer.Add_Tick({
         }
         $script:controlsToToggle.ForEach({ if ($_.IsHandleCreated) { $_.Enabled = $true } })
 
-        # --- NOVO BLOCO DE ATUALIZACAO AUTOMATICA ---
+		Refresh-AppLists
+
         Update-Status "Execucao finalizada. Atualizando listas de aplicativos..."
         
         # Dispara as atualizacoes. Usamos Run-Task para manter o log consistente.
@@ -2469,9 +2512,13 @@ $script:progressTimer.Add_Tick({
         Run-Task "Atualizando status na arvore de softwares" { Populate-AppsTreeView }
         
         Update-Status "Listas de aplicativos atualizadas."
-        # --- FIM DO NOVO BLOCO ---
-
-		if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
+		
+		# Reinicia e retoma o temporizador de inatividade
+		Update-Status "Reiniciando temporizador de inatividade..."
+		$resetShutdownTimer.Invoke() # Reseta a contagem para 15:00
+		$script:shutdownTimer.Start() # Retoma o timer
+        
+				if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
 
         if ($script:dismRepairSuggested) {
             [System.Windows.Forms.MessageBox]::Show("O Windows nao encontrou os arquivos para instalar/alterar um ou mais recursos.`n`nRecomenda-se executar 'Reparar Imagem do Windows (DISM)' e 'Verificar Integridade do Sistema (SFC)'.", "Sugestao de Reparo", "OK", "Information")

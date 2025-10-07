@@ -229,6 +229,10 @@ $script:cachedWindowsFeatures = $null
 # Variavel para armazenar o estado da ordenacao das tabelas
 $script:listViewSortState = @{}
 
+#Criar um timer para fechar o programa em 15 min
+$script:shutdownTimer = New-Object System.Windows.Forms.Timer
+$script:shutdownSecondsRemaining = 15 * 60 # 15 minutos em segundos
+
 # --- Configuracao do Log ---
 $logFile = Join-Path -Path (Split-Path $MyInvocation.MyCommand.Definition) -ChildPath "AZTools-Install-Log_$($script:hostname).txt"
 try {
@@ -1979,7 +1983,7 @@ function Start-Execution {
 
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "AZTools 2 || Build 05102025.1"
+$form.Text = "AZTools 2 || Build 07102025.1"
 $form.Size = New-Object System.Drawing.Size(900, 700) 
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'None'
@@ -2228,6 +2232,18 @@ $runCurrentTabButton = New-Object System.Windows.Forms.Button; $runCurrentTabBut
 $runAllButton = New-Object System.Windows.Forms.Button; $runAllButton.Text = "Executar Tudo"; $runAllButton.Dock = "Left"; $runAllButton.Width = 150
 $clearLogButton = New-Object System.Windows.Forms.Button; $clearLogButton.Text = "Limpar Log"; $clearLogButton.Dock = "Right"; $clearLogButton.Width = 120
 $closeButtonMain = New-Object System.Windows.Forms.Button; $closeButtonMain.Text = "Fechar"; $closeButtonMain.Dock = "Right"; $closeButtonMain.Width = 120
+
+$shutdownLabel = New-Object System.Windows.Forms.Label
+$shutdownLabel.Name = 'shutdownLabel' # Damos um nome para encontra-lo depois
+$shutdownLabel.Text = "15:00"
+$shutdownLabel.Dock = "Right"
+$shutdownLabel.Width = 60
+$shutdownLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+$shutdownLabel.TextAlign = "MiddleCenter"
+
+# Adicionamos o contador ao painel
+$mainButtonPanel.Controls.Add($shutdownLabel)
+
 $mainButtonPanel.Controls.AddRange(@($runAllButton, $runCurrentTabButton, $clearLogButton, $closeButtonMain))
 $stopOnFailCheckBox = New-Object System.Windows.Forms.CheckBox
 $stopOnFailCheckBox.Text = "Parar na primeira falha"
@@ -2259,7 +2275,7 @@ $systemTasks = [ordered]@{
     "Instalar .NET Framework 4.8"              = { Install-DotNetFX48 }
     "Instalar DirectX"                         = { Install-DirectX }
     "Definir Versao de Destino do Windows (24H2)" = { Set-TargetReleaseVersion }
-    "Forcar Todas as Atualizacoes do Windows"  = { Force-WindowsUpdates }
+    "Forcar Todas as Atualizacoes do Windows (Vai pedir para reiniciar)"  = { Force-WindowsUpdates }
 }
 
 $personalizationTasks = [ordered]@{
@@ -2356,6 +2372,50 @@ $script:initialScanTimer.Add_Tick({
     }
 })
 
+# --- LOGICA DO TEMPORIZADOR DE INATIVIDADE ---
+$script:shutdownTimer.Interval = 1000 # O timer dispara a cada 1 segundo
+$script:shutdownTimer.Add_Tick({
+    $script:shutdownSecondsRemaining--
+    $timespan = [TimeSpan]::FromSeconds($script:shutdownSecondsRemaining)
+    # Usamos o .Find para garantir que o controle seja encontrado mesmo apos a criacao do form
+    $shutdownLabel = $form.Controls.Find('shutdownLabel', $true)[0]
+    $shutdownLabel.Text = $timespan.ToString("mm\:ss")
+
+    # Muda a cor para vermelho no ultimo minuto
+    if ($script:shutdownSecondsRemaining -le 60 -and $shutdownLabel.ForeColor -ne [System.Drawing.Color]::Salmon) {
+        $shutdownLabel.ForeColor = [System.Drawing.Color]::Salmon
+    }
+
+    # Se o tempo acabar, fecha o programa
+    if ($script:shutdownSecondsRemaining -le 0) {
+        $script:shutdownTimer.Stop()
+        Update-Status "Temporizador de inatividade de 15 minutos atingido. Fechando o aplicativo."
+        $form.Close()
+    }
+})
+
+# Funcao para resetar o timer sempre que houver atividade
+$resetShutdownTimer = {
+    $script:shutdownSecondsRemaining = 15 * 60
+    # O Try/Catch e para o caso de a UI ainda nao estar 100% pronta no primeiro movimento
+    try {
+        $shutdownLabel = $form.Controls.Find('shutdownLabel', $true)[0]
+        if ($shutdownLabel.IsHandleCreated -and $shutdownLabel.ForeColor -ne $script:themeColors.Foreground) {
+            $shutdownLabel.ForeColor = $script:themeColors.Foreground
+        }
+    } catch {}
+}
+
+# Associa o reset do timer a movimentos do mouse e pressionamento de teclas no formulario
+$form.Add_MouseMove($resetShutdownTimer)
+$form.Add_KeyDown($resetShutdownTimer)
+# --- FIM DO BLOCO A SER ADICIONADO ---
+
+# Evento para o timer que monitora o progresso da execucao em segundo plano
+$script:progressTimer.Add_Tick({
+    # ... (o resto do seu codigo de eventos continua aqui)
+})
+
 # Evento para o timer que monitora o progresso da execucao em segundo plano
 $script:progressTimer.Add_Tick({
     if (-not $script:executionJob) {
@@ -2399,6 +2459,17 @@ $script:progressTimer.Add_Tick({
             $script:loadingOverlay.Close(); $script:loadingOverlay.Dispose()
         }
         $script:controlsToToggle.ForEach({ if ($_.IsHandleCreated) { $_.Enabled = $true } })
+
+        # --- NOVO BLOCO DE ATUALIZACAO AUTOMATICA ---
+        Update-Status "Execucao finalizada. Atualizando listas de aplicativos..."
+        
+        # Dispara as atualizacoes. Usamos Run-Task para manter o log consistente.
+        Run-Task "Atualizando lista de apps desatualizados (Choco)" { Scan-OutdatedChocoApps }
+        Run-Task "Atualizando lista de todos os apps (Registro)" { Scan-RegistryApps }
+        Run-Task "Atualizando status na arvore de softwares" { Populate-AppsTreeView }
+        
+        Update-Status "Listas de aplicativos atualizadas."
+        # --- FIM DO NOVO BLOCO ---
 
 		if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
 
@@ -2596,6 +2667,9 @@ $form.Add_Shown({
     Update-Status "Interface pronta. Disparando analises iniciais..."
     $script:initialScanTimer.Interval = 100
     $script:initialScanTimer.Start()
+	
+    $script:shutdownTimer.Start()
+
 })
 
 Apply-DarkTheme -Control $form

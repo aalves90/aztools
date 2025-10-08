@@ -581,38 +581,28 @@ function Download-File-Robust {
 
 function Get-Image-List-From-Url {
     param([string]$Url)
-    Update-Status "... Lendo o conteudo HTML de '$Url' (usando WebClient)..."
+    Update-Status "... Lendo o conteudo HTML de '$Url' para extrair nomes de imagens..."
 
-    $webClient = $null
     try {
-        # --- NOVA ABORDAGEM: Usando WebClient, que se mostrou mais confiavel ---
-        $webClient = New-Object System.Net.WebClient
-        
-        # Adiciona os mesmos cabecalhos de navegador que usamos na funcao de download
-        $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
-        $webClient.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
+        # Baixa o conteudo HTML da pagina
+        $htmlContent = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
 
-        # Baixa o conteudo HTML da pagina como um texto
-        $htmlContent = $webClient.DownloadString($Url)
-
-        # O resto da logica para analisar o HTML continua a mesma
+        # Usa Regex para encontrar todos os links que terminam com extensoes de imagem
+        # Esta expressao captura o nome do arquivo dentro do atributo href
         $regex = [regex] 'href="([^"]+\.(png|jpg|jpeg|bmp|gif|webp))"'
         $matches = $regex.Matches($htmlContent)
 
+        # Extrai apenas os nomes dos arquivos dos links encontrados
         $fileList = $matches | ForEach-Object { $_.Groups[1].Value }
 
         if ($fileList.Count -eq 0) {
-            throw "Nenhuma imagem encontrada na pagina. O HTML pode estar vazio ou o formato mudou."
+            throw "Nenhuma imagem encontrada na pagina. O formato do HTML pode ter mudado ou o diretorio esta vazio."
         }
         
         Update-Status "... Encontradas $($fileList.Count) imagens via analise de HTML."
         return $fileList
     } catch {
          throw "Nao foi possivel analisar a pagina '$Url'. Erro: $($_.Exception.Message)"
-    } finally {
-        if ($webClient -ne $null) {
-            $webClient.Dispose()
-        }
     }
 }
 
@@ -623,7 +613,6 @@ function Get-DownloadsPath {
     if ($path) { return [System.Environment]::ExpandEnvironmentVariables($path) }
     return [System.IO.Path]::Combine([System.Environment]::GetFolderPath('UserProfile'), 'Downloads')
 }
-
 
 function Get-And-Convert-ShortcutIcon {
     param([string]$IconUrl, [string]$ShortcutName, [string]$IconCachePath)
@@ -1958,7 +1947,7 @@ function Start-Execution {
     }
 }				
 }
-                "Personalizacao" {
+                    "(BETA) Personalizacao" {
                     $personalizationCheckedListBox.CheckedItems | ForEach-Object { $tasksToProcess.Add(@{ Name = $_; Definition = $personalizationTasks[$_] }) | Out-Null }
                 }
                 "Softwares" {
@@ -2091,7 +2080,7 @@ function Start-Execution {
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AZTools 2 || Build 07102025.1"
-$form.Size = New-Object System.Drawing.Size(900, 700) 
+$form.Size = New-Object System.Drawing.Size(1200, 700) 
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'None'
 $form.Padding = New-Object System.Windows.Forms.Padding(1)
@@ -2156,7 +2145,7 @@ $tabControl = New-Object System.Windows.Forms.TabControl
 $tabControl.Multiline = $true
 $systemTabPage = New-Object System.Windows.Forms.TabPage; $systemTabPage.Text = "Sistema e Manutencao"
 $filesTabPage = New-Object System.Windows.Forms.TabPage; $filesTabPage.Text = "Limpeza de Arquivos e Registros"
-$personalizationTabPage = New-Object System.Windows.Forms.TabPage; $personalizationTabPage.Text = "Personalizacao"
+$personalizationTabPage = New-Object System.Windows.Forms.TabPage; $personalizationTabPage.Text = "(BETA) Personalizacao"
 $softwaresTabPage = New-Object System.Windows.Forms.TabPage; $softwaresTabPage.Text = "Softwares"
 $debloatTabPage = New-Object System.Windows.Forms.TabPage; $debloatTabPage.Text = "Otimizacao e Bloatware"
 $endpointSecurityTabPage = New-Object System.Windows.Forms.TabPage; $endpointSecurityTabPage.Text = "Endpoint Security"
@@ -2740,8 +2729,10 @@ $featuresSearchBox.Add_TextChanged({
 
 # Evento da troca de Abas
 $tabControl.Add_SelectedIndexChanged({
-    $runnableTabs = @("Sistema e Manutencao", "(BETA) Recursos do Windows", "(BETA)Personalizacao", "Softwares", "Otimizacao e Bloatware", "Endpoint Security")
+$runnableTabs = @("Sistema e Manutencao", "(BETA) Recursos do Windows", "(BETA) Personalizacao", "Softwares", "Otimizacao e Bloatware", "Endpoint Security")
     $runCurrentTabButton.Enabled = $tabControl.SelectedTab.Text -in $runnableTabs
+
+    # Logica para auto-analisar a aba de limpeza na primeira vez que e aberta
     if (($tabControl.SelectedTab.Text -eq "Limpeza de Arquivos e Registros") -and (-not $script:cleanupTabHasBeenAnalyzed)) {
         Update-Status "Executando analise inicial da aba de limpeza..."
         Analyze-CleanableFiles
@@ -2750,7 +2741,6 @@ $tabControl.Add_SelectedIndexChanged({
         Update-Status "Analise inicial da limpeza concluida."
     }
 })
-
 # #############################################################################
 # ####### FIM DA ASSOCIACAO DE EVENTOS #######
 # #############################################################################

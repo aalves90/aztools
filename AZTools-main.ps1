@@ -19,9 +19,9 @@ $script:config = @{
     
     # Aplicativos padrao recomendados pela AZCorp
     RecommendedApps = @(
-		@{ Name = "softphone 1.0.9";       ChocoPackage = "softphone-interno";              Executable = "softphone.exe" },
+		@{ Name = "softphone 1.0.9";       			ChocoPackage = "softphone-interno";               Executable = "softphone.exe" },
 		@{ Name = "7-Zip";                           ChocoPackage = "7zip";                           Executable = "7zFM.exe" },
-        @{ Name = "Microsoft Edge";                  ChocoPackage = "microsoft-edge";                  Executable = "msedge.exe" },
+        @{ Name = "Microsoft Edge";                  ChocoPackage = "microsoft-edge";                 Executable = "msedge.exe" },
 		@{ Name = "Microsoft Teams";                 ChocoPackage = "microsoft-teams-new-bootstrapper"; Executable = "ms-teams.exe" },
         @{ Name = "Power BI Desktop";                ChocoPackage = "powerbi-desktop";                Executable = "PBIDesktop.exe" },
         @{ Name = "Zoom";                            ChocoPackage = "zoom";                           Executable = "Zoom.exe" },
@@ -2772,6 +2772,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

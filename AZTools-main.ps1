@@ -581,28 +581,35 @@ function Download-File-Robust {
 
 function Get-Image-List-From-Url {
     param([string]$Url)
-    Update-Status "... Lendo o conteudo HTML de '$Url' para extrair nomes de imagens..."
+    Update-Status "... Lendo o conteudo HTML de '$Url' (usando WebClient)..."
 
+    $webClient = $null
     try {
-        # Baixa o conteudo HTML da pagina
-        $htmlContent = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
+        # --- ABORDAGEM FINAL: Usando WebClient para ler o HTML ---
+        $webClient = New-Object System.Net.WebClient
+        
+        $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+        $webClient.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
 
-        # Usa Regex para encontrar todos os links que terminam com extensoes de imagem
-        # Esta expressao captura o nome do arquivo dentro do atributo href
+        $htmlContent = $webClient.DownloadString($Url)
+
         $regex = [regex] 'href="([^"]+\.(png|jpg|jpeg|bmp|gif|webp))"'
         $matches = $regex.Matches($htmlContent)
 
-        # Extrai apenas os nomes dos arquivos dos links encontrados
         $fileList = $matches | ForEach-Object { $_.Groups[1].Value }
 
         if ($fileList.Count -eq 0) {
-            throw "Nenhuma imagem encontrada na pagina. O formato do HTML pode ter mudado ou o diretorio esta vazio."
+            throw "Nenhuma imagem encontrada na pagina. O HTML pode estar vazio ou o formato mudou."
         }
         
         Update-Status "... Encontradas $($fileList.Count) imagens via analise de HTML."
         return $fileList
     } catch {
          throw "Nao foi possivel analisar a pagina '$Url'. Erro: $($_.Exception.Message)"
+    } finally {
+        if ($webClient -ne $null) {
+            $webClient.Dispose()
+        }
     }
 }
 
@@ -1295,7 +1302,8 @@ function Analyze-CleanableFiles {
             $systemCleanOptions = [ordered]@{
                 "Esvaziar Lixeira" = @{ Type = "Action"; Action = [scriptblock]{ Clear-RecycleBin -Force -ErrorAction SilentlyContinue }; GetSize = [scriptblock]{ try { return ((New-Object -ComObject Shell.Application).NameSpace(0x0a).Items() | Measure-Object -Property Size -Sum -ErrorAction Stop).Sum } catch { return 0 } } }
                 "Arquivos Temporarios" = @{ Type = "FolderContent"; Path = @("$env:TEMP", "$env:windir\Temp") }
-                "Area de Transferencia" = @{ Type = "Action"; Action = [scriptblock]{ Set-Clipboard -Value $null }; GetSize = { return 0 } }
+                "Cache do Chocolatey (Pacotes Baixados)" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\chocolatey\temp", "$env:ProgramData\chocolatey\downloads") }
+				"Area de Transferencia" = @{ Type = "Action"; Action = [scriptblock]{ Set-Clipboard -Value $null }; GetSize = { return 0 } }
                 "Despejos de Memoria" = @{ Type = "File"; Path = @("$env:windir\Minidump\*.*", "$env:windir\MEMORY.DMP") }
                 "Fragmentos do verificador de disco" = @{ Type = "File"; Path = @("$($env:SystemDrive)\*.chk") }
                 "Relatorios do Windows" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\Microsoft\Windows\WER\ReportArchive", "$env:ProgramData\Microsoft\Windows\WER\ReportQueue", "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportArchive", "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportQueue") }
@@ -1524,84 +1532,70 @@ function Reset-Winsock {
 function Scan-OutdatedChocoApps { $scanChocoButton.Enabled = $false; $updateChocoButton.Enabled = $false; $chocoUpdatesListView.Items.Clear(); Run-Task "Verificar Desatualizados (Choco)" { Ensure-ChocolateyIsInstalled | Out-Null; $choco = "$env:ProgramData\chocolatey\bin\choco.exe"; $out = & $choco outdated -r 2>&1 | Out-String; if ($LASTEXITCODE -ne 0 -and ($out -notlike "*outdated*") -and ($out -notlike "*determined*")) { throw "choco outdated falhou: $out" }; $lines = $out.Split([Environment]::NewLine) | ? { $_ -match '\|' -and $_ -notlike 'Output is id*' }; $c = 0; $i = 1; foreach ($line in $lines) { $parts = $line.Split('|') | % { $_.Trim() }; if ($parts.Length -ge 3 -and -not [string]::IsNullOrWhiteSpace($parts[0])) { $c++; $item = New-Object System.Windows.Forms.ListViewItem($i.ToString()); $item.SubItems.Add($parts[0]); $item.SubItems.Add($parts[1]); $item.SubItems.Add($parts[2]); $item.Checked = $true; $chocoUpdatesListView.Items.Add($item) | Out-Null; $i++ } }; if ($c -gt 0) { $updateChocoButton.Enabled = $true } }; $chocoUpdatesListView.AutoResizeColumns(1); $scanChocoButton.Enabled = $true }
 
 function Update-RegisteredAppsList {
-    # Limpa a interface e o cache de aplicativos
     $regUpdatesListView.Items.Clear()
     $script:cachedInstalledApps = [ordered]@{}
-
-    # Etapa 1: Obter todos os pacotes instalados via Chocolatey
     $chocoApps = @{}
     try {
-        # Garante que o choco.exe exista antes de tentar usa-lo
         $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
         if (Test-Path $chocoExe) {
             $chocoList = & $chocoExe list -li -r 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                $chocoList | ForEach-Object {
-                    $parts = $_.Split('|')
-                    if ($parts.Count -ge 2) {
-                        $chocoApps[$parts[0]] = $parts[1]
-                    }
-                }
-            }
+            if ($LASTEXITCODE -eq 0) { $chocoList | ForEach-Object { $parts = $_.Split('|'); if ($parts.Count -ge 2) { $chocoApps[$parts[0]] = $parts[1] } } }
         }
     } catch { Update-Status "AVISO: Nao foi possivel listar os pacotes Chocolatey." }
 
-    # Etapa 2: Varrer o registro do Windows para encontrar todos os aplicativos
+    # --- ETAPA 1: Varrer o registro (programas tradicionais) ---
+    Update-Status "... Verificando aplicativos tradicionais (Registro)..."
     $paths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
     foreach ($p in $paths) {
         Get-ChildItem -Path $p -ErrorAction SilentlyContinue | ForEach-Object {
-            $key = $_
-            $name = $key.GetValue("DisplayName")
-            $uninstallString = $key.GetValue("UninstallString")
-            
+            $key = $_; $name = $key.GetValue("DisplayName"); $uninstallString = $key.GetValue("UninstallString")
             if ((-not [string]::IsNullOrWhiteSpace($name)) -and (-not [string]::IsNullOrWhiteSpace($uninstallString)) -and ($key.GetValue("SystemComponent") -ne 1)) {
-                # CORRECAO: Usa o operador '-contains' que e o metodo correto para a colecao de chaves.
                 if (-not ($script:cachedInstalledApps.Keys -contains $name)) {
-                    # Determina a origem do aplicativo
-                    $origin = "Windows"
-					# Melhora a logica de match para ser mais precisa
-                    $chocoMatch = $chocoApps.Keys | Where-Object { $name -match ('^' + [regex]::Escape($_) + '(\s|$)') } | Select-Object -First 1
-                    if ($chocoMatch) {
-                        $origin = "Chocolatey"
-                    }
-                    
-                    # Adiciona ao cache
-                    $script:cachedInstalledApps[$name] = [pscustomobject]@{
-                        Name            = $name
-                        Version         = $key.GetValue("DisplayVersion")
-                        Publisher       = $key.GetValue("Publisher")
-                        UninstallString = $uninstallString
-                        Origin          = $origin
-                    }
+                    $origin = "Windows"; $chocoMatch = $chocoApps.Keys | Where-Object { $name -match ('^' + [regex]::Escape($_) + '(\s|$)') } | Select-Object -First 1
+                    if ($chocoMatch) { $origin = "Chocolatey" }
+                    $script:cachedInstalledApps[$name] = [pscustomobject]@{ Name = $name; Version = $key.GetValue("DisplayVersion"); Publisher = $key.GetValue("Publisher"); UninstallString = $uninstallString; Origin = $origin }
                 }
             }
         }
     }
     
-    # Etapa 3: Adicionar aplicativos que so existem no Chocolatey (sem entrada no registro)
+    # --- ETAPA 2 (NOVA E CORRIGIDA): Varrer pacotes da Microsoft Store (Appx) ---
+    Update-Status "... Verificando aplicativos da Microsoft Store..."
+    try {
+        # Usamos -PackageTypeFilter Main para focar em apps de usuario, nao componentes de sistema
+        Get-AppxPackage -PackageTypeFilter Main | ForEach-Object {
+            $app = $_
+            # O nome de exibicao do app da Store e mais confiavel para a comparacao
+            $displayName = (Get-AppxPackageManifest $app).Package.Properties.DisplayName
+            
+            # Garante que nao e um componente de sistema e que ainda nao foi adicionado
+            if ($app.SignatureKind -ne "System" -and (-not [string]::IsNullOrWhiteSpace($displayName)) -and (-not ($script:cachedInstalledApps.Keys -contains $displayName))) {
+                 $script:cachedInstalledApps[$displayName] = [pscustomobject]@{
+                    Name            = $displayName
+                    Version         = $app.Version
+                    Publisher       = $app.Publisher
+                    UninstallString = "winget uninstall $($app.PackageFamilyName)"
+                    Origin          = "Microsoft Store"
+                }
+            }
+        }
+    } catch { Update-Status "AVISO: Nao foi possivel listar os pacotes da Microsoft Store."}
+
+
+    # --- ETAPA 3: Adicionar aplicativos que so existem no Chocolatey ---
     foreach ($chocoApp in $chocoApps.GetEnumerator()) {
         if (-not ($script:cachedInstalledApps.Keys -contains $chocoApp.Name)) {
-            $script:cachedInstalledApps[$chocoApp.Name] = [pscustomobject]@{
-                Name            = $chocoApp.Name
-                Version         = $chocoApp.Value
-                Publisher       = "Chocolatey Package"
-                UninstallString = "choco uninstall $($chocoApp.Name)"
-                Origin          = "Chocolatey"
-            }
+            $script:cachedInstalledApps[$chocoApp.Name] = [pscustomobject]@{ Name = $chocoApp.Name; Version = $chocoApp.Value; Publisher = "Chocolatey Package"; UninstallString = "choco uninstall $($chocoApp.Name)"; Origin = "Chocolatey" }
         }
     }
 
-    # Etapa 4: Ordenar a lista combinada e popular a interface
+    # --- ETAPA 4: Ordenar e popular a interface ---
     $sortedApps = $script:cachedInstalledApps.Values | Sort-Object Name
     $regUpdatesListView.BeginUpdate()
     $i = 1
     foreach ($app in $sortedApps) {
         $item = New-Object System.Windows.Forms.ListViewItem($app.Origin)
-        $item.SubItems.Add($i.ToString())
-        $item.SubItems.Add($app.Name)
-        $item.SubItems.Add($(if ($app.Version) { $app.Version } else { "N/D" }))
-        $item.SubItems.Add($(if ($app.Publisher) { $app.Publisher } else { "N/D" }))
-        $item.Tag = $app.UninstallString
+        $item.SubItems.Add($i.ToString()); $item.SubItems.Add($app.Name); $item.SubItems.Add($(if ($app.Version) { $app.Version } else { "N/D" })); $item.SubItems.Add($(if ($app.Publisher) { $app.Publisher } else { "N/D" })); $item.Tag = $app.UninstallString
         $regUpdatesListView.Items.Add($item) | Out-Null
         $i++
     }
@@ -1652,60 +1646,70 @@ function Uninstall-SelectedApps {
         $unStr = $item.Tag
         
         Run-Task "Desinstalar $appName" { 
-    if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }
+            if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }
 
-    # --- LOGICA DE DESINSTALACAO COMPLETAMENTE REVISADA ---
-    $cmd = ""; $args = "";
-    $uninstallString = $unStr.Trim('"')
+            $cmd = ""; $args = "";
+            $uninstallString = $unStr.Trim('"')
 
-    # 1. Trata o caso especifico do Chocolatey PRIMEIRO
-    if ($uninstallString -match '^(?i)choco uninstall') {
-        $cmd = "$env:ProgramData\chocolatey\bin\choco.exe"
-        # Pega o nome do pacote da string original
-        $packageName = $uninstallString.Split(' ')[-1]
-        # Monta o argumento com -y para confirmacao automatica
-        $args = "uninstall $packageName -y"
-        
-        Update-Status "... Executando (Choco): `"$cmd`" $args"
-        Start-Process -FilePath $cmd -ArgumentList $args -Wait -WindowStyle Hidden -ErrorAction Stop
+            if ($uninstallString -match '^(?i)choco uninstall') {
+                $cmd = "$env:ProgramData\chocolatey\bin\choco.exe"
+                $packageName = $uninstallString.Split(' ')[-1]
+                $args = "uninstall $packageName -y"
+                
+                Update-Status "... Executando (Choco): `"$cmd`" $args"
+                Start-Process -FilePath $cmd -ArgumentList $args -Wait -WindowStyle Hidden -ErrorAction Stop
 
-    } 
-    # 2. Se nao for Choco, continua com a logica para .exe e msiexec
-    else {
-        # Trata o caso do MsiExec.exe
-        if ($uninstallString -match '^(?i)MsiExec.exe') {
-            $cmd = "msiexec.exe"
-            $args = $uninstallString.Substring(11).Trim()
-        } 
-        # Trata o caso de um .exe entre aspas
-        elseif ($uninstallString -match '^"([^"]+\.exe)"') {
-            $cmd = $matches[1]
-            $args = $uninstallString.Substring($matches[0].Length).Trim()
+            } 
+            else {
+                if ($uninstallString -match '^(?i)MsiExec.exe') {
+                    $cmd = "msiexec.exe"
+                    $args = $uninstallString.Substring(11).Trim()
+                } 
+                elseif ($uninstallString -match '^"([^"]+\.exe)"') {
+                    $cmd = $matches[1]
+                    $args = $uninstallString.Substring($matches[0].Length).Trim()
+                }
+                elseif ($uninstallString -match '^([^"]+\.exe)') {
+                    $cmd = $matches[1]
+                    $args = $uninstallString.Substring($cmd.Length).Trim()
+                }
+                else {
+                    throw "Nao foi possivel interpretar a string de desinstalacao: $uninstallString"
+                }
+                
+                $silentArgs = ""
+                if ($cmd -match 'msiexec' -and $args -notmatch '(/qn|/quiet)') {
+                    $args = $args.Replace("/I", "/X").Trim()
+                    $silentArgs = "/qn /norestart"
+                } elseif ($cmd -notmatch 'msiexec' -and $args -notmatch '(/S|/silent|/quiet)') {
+                    $silentArgs = "/S"
+                }
+                
+                $finalArgs = "$args $silentArgs".Trim()
+                Update-Status "... Executando: `"$cmd`" $finalArgs"
+                Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -ErrorAction Stop
+            }
         }
-        # Trata o caso de um .exe sem aspas
-        elseif ($uninstallString -match '^([^"]+\.exe)') {
-            $cmd = $matches[1]
-            $args = $uninstallString.Substring($cmd.Length).Trim()
-        }
-        else {
-            throw "Nao foi possivel interpretar a string de desinstalacao: $uninstallString"
-        }
-        
-        # Adiciona parametros silenciosos para .exe e msiexec
-        $silentArgs = ""
-        if ($cmd -match 'msiexec' -and $args -notmatch '(/qn|/quiet)') {
-            $args = $args.Replace("/I", "/X").Trim()
-            $silentArgs = "/qn /norestart"
-        } elseif ($cmd -notmatch 'msiexec' -and $args -notmatch '(/S|/silent|/quiet)') {
-            $silentArgs = "/S"
-        }
-        
-        $finalArgs = "$args $silentArgs".Trim()
-        Update-Status "... Executando: `"$cmd`" $finalArgs"
-        Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -ErrorAction Stop
     }
-	}
-	}
+
+    # --- INICIO DA CORRECAO ---
+    # A logica de "Refresh-AppLists" foi movida para ca para resolver o erro.
+    Update-Status "Desinstalacoes concluidas. Atualizando listas de aplicativos..."
+    Run-Task "Atualizando lista de apps desatualizados (Choco)" { Scan-OutdatedChocoApps }
+    Run-Task "Atualizando lista de todos os apps (Registro)" { Scan-RegistryApps }
+    Run-Task "Atualizando status na arvore de softwares" { Populate-AppsTreeView }
+    Update-Status "Listas de aplicativos atualizadas."
+
+    # A logica de "$resetShutdownTimer" foi movida para ca para resolver o erro.
+    $script:shutdownSecondsRemaining = 15 * 60
+    try {
+        $shutdownLabel = $form.Controls.Find('shutdownLabel', $true)[0]
+        if ($shutdownLabel.IsHandleCreated -and $shutdownLabel.ForeColor -ne $script:themeColors.Foreground) {
+            $shutdownLabel.ForeColor = $script:themeColors.Foreground
+        }
+    } catch {}
+    $script:shutdownTimer.Start()
+    # --- FIM DA CORRECAO ---
 }
 
 function Refresh-AppLists {
@@ -2080,7 +2084,7 @@ function Start-Execution {
 
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "AZTools 2 || Build 07102025.1"
+$form.Text = "AZTools 2 || Build 08102025.1"
 $form.Size = New-Object System.Drawing.Size(1200, 700) 
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'None'
@@ -2273,6 +2277,19 @@ $treeViewForApps = New-Object System.Windows.Forms.TreeView
 $treeViewForApps.CheckBoxes = $true
 $appsTreeView = Create-TitledControlPanel $softwaresTablePanel "Instalacao de Aplicativos e Atalhos" $treeViewForApps
 
+# --- INICIO: Adiciona o botao de Limpar Cache do Chocolatey ---
+$appsTreeGroup = $appsTreeView.Parent
+$appsTreeButtonPanel = $appsTreeGroup.Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] }
+
+$cleanChocoCacheButton = New-Object System.Windows.Forms.Button
+$cleanChocoCacheButton.Text = "Limpar Cache Choco"
+$cleanChocoCacheButton.Dock = "Left"
+$cleanChocoCacheButton.Width = 140
+$cleanChocoCacheButton.BringToFront() # Garante que ele apareca na frente dos outros
+
+$appsTreeButtonPanel.Controls.Add($cleanChocoCacheButton)
+# --- FIM: Adiciona o botao de Limpar Cache do Chocolatey ---
+
 $managementSplitContainer = New-Object System.Windows.Forms.SplitContainer; $managementSplitContainer.Dock = "Fill"; $managementSplitContainer.Orientation = "Horizontal"
 $softwaresTablePanel.Controls.Add($managementSplitContainer, 1, 0)
 
@@ -2450,6 +2467,67 @@ Add-ListViewColumns $bloatwarePanel.Control @("(#)", "Nome", "Status")
 # #############################################################################
 # ####### INICIO DA ASSOCIACAO DE EVENTOS #######
 # #############################################################################
+
+# --- Evento do novo botao para limpar o cache e FORCAR SINCRONIZACAO do Chocolatey ---
+$cleanChocoCacheButton.Add_Click({
+    if (-not (Confirm-Action "Isso ira executar uma manutencao completa no Chocolatey:`n`n1. Atualizar o Choco.`n2. Limpar caches.`n3. Forcar sincronia com o Windows (remove pacotes 'fantasmas').`n`nO processo pode demorar um pouco. Deseja continuar?")) { return }
+    
+    Run-Task "Manutencao Completa do Chocolatey" {
+        Ensure-ChocolateyIsInstalled | Out-Null
+        $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
+        
+        Update-Status "--> ETAPA 1/3: Atualizando o Chocolatey para a versao mais recente..."
+        & $chocoExe upgrade chocolatey -y -r
+        
+        Update-Status "--> ETAPA 2/3: Limpando caches de pacotes..."
+        $tempPath = Join-Path $env:ProgramData "chocolatey\temp"
+        if (Test-Path $tempPath) { Remove-Item -Path "$tempPath\*" -Recurse -Force -ErrorAction SilentlyContinue }
+        $downloadsPath = Join-Path $env:ProgramData "chocolatey\downloads"
+        if (Test-Path $downloadsPath) { Remove-Item -Path "$downloadsPath\*" -Recurse -Force -ErrorAction SilentlyContinue }
+
+        Update-Status "--> ETAPA 3/3: Iniciando Sincronizacao Forcada..."
+        
+        # Pega a lista de pacotes que o Chocolatey acha que estao instalados
+        Update-Status "... Obtendo lista de pacotes do Chocolatey..."
+        $chocoPackages = & $chocoExe list --local-only --exact --limit-output -r | ForEach-Object { ($_.Split('|')[0]) }
+        
+        # Pega a lista de programas REALMENTE instalados no Windows
+        Update-Status "... Obtendo lista de programas do Registro do Windows..."
+        $installedWindowsApps = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $regPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+        foreach ($p in $regPaths) {
+            Get-ChildItem -Path $p -ErrorAction SilentlyContinue | ForEach-Object {
+                $displayName = $_.GetValue("DisplayName")
+                if (-not [string]::IsNullOrWhiteSpace($displayName)) {
+                    $installedWindowsApps.Add($displayName) | Out-Null
+                }
+            }
+        }
+        
+        Update-Status "... Comparando as listas para encontrar pacotes orfaos..."
+        $orphanFound = $false
+        foreach ($pkgName in $chocoPackages) {
+            if ([string]::IsNullOrWhiteSpace($pkgName) -or $pkgName -eq 'chocolatey') { continue }
+            
+            # Tenta encontrar uma correspondencia na lista do Windows
+            $match = $installedWindowsApps | Where-Object { $_ -match [regex]::Escape($pkgName) }
+            
+            if (-not $match) {
+                $orphanFound = $true
+                Update-Status "AVISO: Pacote orfao detectado: '$pkgName'. Ele existe no Chocolatey mas nao no Windows."
+                Update-Status "--> Forcando desinstalacao para limpar o registro do Choco..."
+                & $chocoExe uninstall $pkgName --force -y -r
+            }
+        }
+
+        if (-not $orphanFound) {
+            Update-Status "... Nenhum pacote orfao encontrado. O Chocolatey esta sincronizado."
+        }
+        
+        Update-Status "--> Manutencao concluida. Atualizando as listas no AZTools..."
+        Refresh-AppLists
+    }
+})
 
 # Evento para o timer que dispara as analises iniciais assim que a UI e exibida
 $script:initialScanTimer.Add_Tick({

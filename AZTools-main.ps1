@@ -1627,12 +1627,13 @@ function Update-SelectedChocoApps {
         return
     }
     $chocoExePath = "'$env:ProgramData\chocolatey\bin\choco.exe'"
-    $customTasksToRun = [System.Collections.ArrayList]::new()
-    $selectedItems | ForEach-Object {
-        $appName = $_.SubItems[1].Text
-        $actionBlock = [scriptblock]::Create("& $chocoExePath upgrade $appName -y -r")
-        $customTasksToRun.Add(@{ N = "Atualizando $appName (Choco)"; A = $actionBlock }) | Out-Null
-    }
+$customTasksToRun = [System.Collections.ArrayList]::new()
+$selectedItems | ForEach-Object {
+    $appName = $_.SubItems[1].Text
+    $actionBlock = [scriptblock]::Create("& $chocoExePath upgrade $appName -y -r")
+    # --- CORRECAO APLICADA AQUI ---
+    $customTasksToRun.Add(@{ Name = "Atualizando $appName (Choco)"; Definition = $actionBlock }) | Out-Null
+}
     Start-Execution -CustomTasks $customTasksToRun
 }
 function Scan-RegistryApps { $scanRegButton.Enabled = $false; $searchForUpdateButton.Enabled = $false; $uninstallRegButton.Enabled = $false; Run-Task "Verificar Apps Instalados (Registro)" { Update-RegisteredAppsList }; $scanRegButton.Enabled = $true }
@@ -2772,6 +2773,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

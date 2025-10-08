@@ -1817,7 +1817,7 @@ function Populate-AppsTreeView {
         $node = New-Object System.Windows.Forms.TreeNode("$appName")
         
         # Verifica se o app esta no cache de instalados
-        $match = $installedAppsCache | Where-Object { $_ -like "*$appName*" } | Select-Object -First 1
+		$match = $installedAppsCache | Where-Object { $_ -match "\b$([regex]::Escape($appName))\b" } | Select-Object -First 1
         if ($match) {
             $node.Text += " (Instalado)"
             $node.ForeColor = [System.Drawing.Color]::LightGreen
@@ -2542,7 +2542,7 @@ $cleanChocoCacheButton.Add_Click({
         $orphanFound = $false
         foreach ($pkgName in $chocoPackages) {
             if ([string]::IsNullOrWhiteSpace($pkgName) -or $pkgName -eq 'chocolatey') { continue }
-            $match = $installedWindowsApps | Where-Object { $_ -match [regex]::Escape($pkgName) }
+			$match = $installedWindowsApps | Where-Object { $_ -match "\b$([regex]::Escape($pkgName))\b" }
             if (-not $match) {
                 $orphanFound = $true
                 Update-Status "AVISO: Pacote Choco orfao detectado: '$pkgName'."

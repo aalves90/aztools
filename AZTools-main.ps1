@@ -584,11 +584,16 @@ function Get-Image-List-From-Url {
     Update-Status "... Lendo o conteudo HTML de '$Url' para extrair nomes de imagens..."
 
     try {
-        # Baixa o conteudo HTML da pagina
-        $htmlContent = Invoke-WebRequest -Uri $Url -UseBasicParsing -ErrorAction Stop
+        # --- CORRECAO: Adiciona cabecalhos para simular um navegador ---
+        $headers = @{
+            "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+            "Accept"     = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
+        }
+
+        # Baixa o conteudo HTML da pagina usando os novos cabecalhos
+        $htmlContent = Invoke-WebRequest -Uri $Url -Headers $headers -UseBasicParsing -ErrorAction Stop
 
         # Usa Regex para encontrar todos os links que terminam com extensoes de imagem
-        # Esta expressao captura o nome do arquivo dentro do atributo href
         $regex = [regex] 'href="([^"]+\.(png|jpg|jpeg|bmp|gif|webp))"'
         $matches = $regex.Matches($htmlContent)
 
@@ -2772,6 +2777,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

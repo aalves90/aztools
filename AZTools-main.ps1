@@ -581,33 +581,38 @@ function Download-File-Robust {
 
 function Get-Image-List-From-Url {
     param([string]$Url)
-    Update-Status "... Lendo o conteudo HTML de '$Url' para extrair nomes de imagens..."
+    Update-Status "... Lendo o conteudo HTML de '$Url' (usando WebClient)..."
 
+    $webClient = $null
     try {
-        # --- CORRECAO: Adiciona cabecalhos para simular um navegador ---
-        $headers = @{
-            "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-            "Accept"     = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
-        }
+        # --- NOVA ABORDAGEM: Usando WebClient, que se mostrou mais confiavel ---
+        $webClient = New-Object System.Net.WebClient
+        
+        # Adiciona os mesmos cabecalhos de navegador que usamos na funcao de download
+        $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36")
+        $webClient.Headers.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8")
 
-        # Baixa o conteudo HTML da pagina usando os novos cabecalhos
-        $htmlContent = Invoke-WebRequest -Uri $Url -Headers $headers -UseBasicParsing -ErrorAction Stop
+        # Baixa o conteudo HTML da pagina como um texto
+        $htmlContent = $webClient.DownloadString($Url)
 
-        # Usa Regex para encontrar todos os links que terminam com extensoes de imagem
+        # O resto da logica para analisar o HTML continua a mesma
         $regex = [regex] 'href="([^"]+\.(png|jpg|jpeg|bmp|gif|webp))"'
         $matches = $regex.Matches($htmlContent)
 
-        # Extrai apenas os nomes dos arquivos dos links encontrados
         $fileList = $matches | ForEach-Object { $_.Groups[1].Value }
 
         if ($fileList.Count -eq 0) {
-            throw "Nenhuma imagem encontrada na pagina. O formato do HTML pode ter mudado ou o diretorio esta vazio."
+            throw "Nenhuma imagem encontrada na pagina. O HTML pode estar vazio ou o formato mudou."
         }
         
         Update-Status "... Encontradas $($fileList.Count) imagens via analise de HTML."
         return $fileList
     } catch {
          throw "Nao foi possivel analisar a pagina '$Url'. Erro: $($_.Exception.Message)"
+    } finally {
+        if ($webClient -ne $null) {
+            $webClient.Dispose()
+        }
     }
 }
 
@@ -2777,6 +2782,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

@@ -1100,7 +1100,6 @@ function Install-Softphone {
     
     Update-Status "--> Iniciando instalacao silenciosa do Softphone..."
     
-    # --- CORRECAO PRINCIPAL APLICADA AQUI ---
     # 1. O comando "-Wait" e "-PassThru" foram removidos.
     # O "-Wait" estava fazendo o script travar porque o instalador do softphone
     # provavelmente não encerra seu processo principal após a conclusão.
@@ -2082,6 +2081,42 @@ function Start-Execution {
     $script:progressTimer.Start()
 }
 
+function Clean-OrphanedRegistryEntries {
+    Run-Task "Limpeza de Desinstaladores Orfaos do Registro" {
+        Update-Status "... Verificando Desinstaladores Orfaos no Registro do Windows..."
+        $orphansToDelete = [System.Collections.ArrayList]::new()
+
+        # Logica que busca por entradas de desinstalacao cuja pasta de instalacao nao existe mais
+        $uninstPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+        foreach ($p in $uninstPaths) {
+            Get-ChildItem -Path $p -ErrorAction SilentlyContinue | ForEach-Object {
+                $installLocation = $_.GetValue("InstallLocation")
+                $displayName = $_.GetValue("DisplayName")
+                # So considera orfao se tiver um DisplayName e uma pasta de instalacao que nao existe
+                if ((-not [string]::IsNullOrWhiteSpace($displayName)) -and $installLocation -and (-not (Test-Path $installLocation))) {
+                    $orphansToDelete.Add(@{ Name = $displayName; Path = $_.PSPath }) | Out-Null
+                }
+            }
+        }
+
+        if ($orphansToDelete.Count -eq 0) {
+            Update-Status "... Nenhum Desinstalador Orfao encontrado no registro."
+            return
+        }
+
+        Update-Status "--> Encontrados $($orphansToDelete.Count) desinstaladores orfaos. Iniciando limpeza automatica..."
+        foreach ($orphan in $orphansToDelete) {
+            try {
+                Update-Status "--> Removendo registro orfao: $($orphan.Name)"
+                Remove-Item -Path $orphan.Path -Recurse -Force -ErrorAction Stop
+            } catch {
+                Update-Status "AVISO: Falha ao remover chave de registro para '$($orphan.Name)'."
+            }
+        }
+        Update-Status "... Limpeza de registros orfaos concluida."
+    }
+}
+
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AZTools 2 || Build 08102025.1"
@@ -2468,31 +2503,30 @@ Add-ListViewColumns $bloatwarePanel.Control @("(#)", "Nome", "Status")
 # ####### INICIO DA ASSOCIACAO DE EVENTOS #######
 # #############################################################################
 
-# --- Evento do novo botao para limpar o cache e FORCAR SINCRONIZACAO do Chocolatey ---
+# --- Evento do botao de MANUTENCAO COMPLETA (Choco + Registro) ---
 $cleanChocoCacheButton.Add_Click({
-    if (-not (Confirm-Action "Isso ira executar uma manutencao completa no Chocolatey:`n`n1. Atualizar o Choco.`n2. Limpar caches.`n3. Forcar sincronia com o Windows (remove pacotes 'fantasmas').`n`nO processo pode demorar um pouco. Deseja continuar?")) { return }
+    if (-not (Confirm-Action "Isso ira executar uma MANUTENCAO COMPLETA:`n`n1. Limpar registros orfaos do Windows.`n2. Atualizar o Choco e limpar seus caches.`n3. Forcar sincronia do Choco com o Windows.`n`nEste e o 'botao do panico' para resolver problemas de instalacao. Deseja continuar?")) { return }
     
+    # Executa a limpeza de registro primeiro, pois ela pode ser a causa dos problemas do Choco
+    Clean-OrphanedRegistryEntries
+
+    # Executa a manutencao completa do Chocolatey
     Run-Task "Manutencao Completa do Chocolatey" {
         Ensure-ChocolateyIsInstalled | Out-Null
         $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
         
-        Update-Status "--> ETAPA 1/3: Atualizando o Chocolatey para a versao mais recente..."
+        Update-Status "--> ETAPA 1/2: Atualizando o Chocolatey e limpando caches..."
         & $chocoExe upgrade chocolatey -y -r
-        
-        Update-Status "--> ETAPA 2/3: Limpando caches de pacotes..."
         $tempPath = Join-Path $env:ProgramData "chocolatey\temp"
         if (Test-Path $tempPath) { Remove-Item -Path "$tempPath\*" -Recurse -Force -ErrorAction SilentlyContinue }
         $downloadsPath = Join-Path $env:ProgramData "chocolatey\downloads"
         if (Test-Path $downloadsPath) { Remove-Item -Path "$downloadsPath\*" -Recurse -Force -ErrorAction SilentlyContinue }
 
-        Update-Status "--> ETAPA 3/3: Iniciando Sincronizacao Forcada..."
-        
-        # Pega a lista de pacotes que o Chocolatey acha que estao instalados
+        Update-Status "--> ETAPA 2/2: Iniciando Sincronizacao Forcada do Choco..."
         Update-Status "... Obtendo lista de pacotes do Chocolatey..."
         $chocoPackages = & $chocoExe list --local-only --exact --limit-output -r | ForEach-Object { ($_.Split('|')[0]) }
         
-        # Pega a lista de programas REALMENTE instalados no Windows
-        Update-Status "... Obtendo lista de programas do Registro do Windows..."
+        Update-Status "... Re-verificando lista de programas do Registro do Windows..."
         $installedWindowsApps = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         $regPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
         foreach ($p in $regPaths) {
@@ -2504,27 +2538,24 @@ $cleanChocoCacheButton.Add_Click({
             }
         }
         
-        Update-Status "... Comparando as listas para encontrar pacotes orfaos..."
+        Update-Status "... Comparando as listas para encontrar pacotes choco orfaos..."
         $orphanFound = $false
         foreach ($pkgName in $chocoPackages) {
             if ([string]::IsNullOrWhiteSpace($pkgName) -or $pkgName -eq 'chocolatey') { continue }
-            
-            # Tenta encontrar uma correspondencia na lista do Windows
             $match = $installedWindowsApps | Where-Object { $_ -match [regex]::Escape($pkgName) }
-            
             if (-not $match) {
                 $orphanFound = $true
-                Update-Status "AVISO: Pacote orfao detectado: '$pkgName'. Ele existe no Chocolatey mas nao no Windows."
+                Update-Status "AVISO: Pacote Choco orfao detectado: '$pkgName'."
                 Update-Status "--> Forcando desinstalacao para limpar o registro do Choco..."
                 & $chocoExe uninstall $pkgName --force -y -r
             }
         }
 
         if (-not $orphanFound) {
-            Update-Status "... Nenhum pacote orfao encontrado. O Chocolatey esta sincronizado."
+            Update-Status "... Nenhum pacote choco orfao encontrado. O Chocolatey esta sincronizado."
         }
         
-        Update-Status "--> Manutencao concluida. Atualizando as listas no AZTools..."
+        Update-Status "--> Manutencao concluida. Atualizando todas as listas no AZTools..."
         Refresh-AppLists
     }
 })

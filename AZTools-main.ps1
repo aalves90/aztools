@@ -864,36 +864,36 @@ function Configure-System-Wallpaper {
             $image = [System.Drawing.Image]::FromFile($downloadedImagePath); $image.Save($bmpPath, [System.Drawing.Imaging.ImageFormat]::Bmp); $image.Dispose()
 
             # ESTE E O 'MINI-SCRIPT' MAIS COMPLETO E AGRESSIVO POSSIVEL
-$workerScriptContent = @'
-param([string]$ImagePath)
-
-try {
-    $themesPath = "$env:APPDATA\Microsoft\Windows\Themes"
-    $transcodedPath = Join-Path $themesPath "TranscodedWallpaper"
-    $regPath = 'HKCU:\Control Panel\Desktop'
-    $regName = 'Wallpaper'
-
-    # 1. Ataque Duplo: Edita o registro E substitui o arquivo de cache do Windows
-    Set-ItemProperty -Path $regPath -Name $regName -Value $ImagePath
-    Set-ItemProperty -Path $regPath -Name WallpaperStyle -Value 2
-    Set-ItemProperty -Path $regPath -Name TileWallpaper -Value 0
-    Copy-Item -Path $ImagePath -Destination $transcodedPath -Force -ErrorAction SilentlyContinue
-
-    # 2. Forca o Explorer a reiniciar
-    Stop-Process -Name explorer -Force
-
-    # 3. VERIFICACAO: Espera o Explorer voltar e confere se a mudanca 'pegou'
-    Start-Sleep -Seconds 5 
-    $currentWallpaper = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
-
-    if ($currentWallpaper -and $currentWallpaper.Wallpaper -eq $ImagePath) {
-        exit 0 # Sucesso Verificado
-    } else {
-        exit 1 # Falha na Verificacao
-    }
-} catch {
-    exit 1 # Qualquer outro erro tambem e falha
-}
+            $workerScriptContent = @'
+            param([string]$ImagePath)
+            
+            try {
+                $themesPath = "$env:APPDATA\Microsoft\Windows\Themes"
+                $transcodedPath = Join-Path $themesPath "TranscodedWallpaper"
+                $regPath = 'HKCU:\Control Panel\Desktop'
+                $regName = 'Wallpaper'
+                
+                # 1. Ataque Duplo: Edita o registro E substitui o arquivo de cache do Windows
+                Set-ItemProperty -Path $regPath -Name $regName -Value $ImagePath
+                Set-ItemProperty -Path $regPath -Name WallpaperStyle -Value 2
+                Set-ItemProperty -Path $regPath -Name TileWallpaper -Value 0
+                Copy-Item -Path $ImagePath -Destination $transcodedPath -Force -ErrorAction SilentlyContinue
+                
+                # 2. Forca o Explorer a reiniciar
+                Stop-Process -Name explorer -Force
+                
+                # 3. VERIFICACAO: Espera o Explorer voltar e confere se a mudanca 'pegou'
+                Start-Sleep -Seconds 5 
+                $currentWallpaper = Get-ItemProperty -Path $regPath -Name $regName -ErrorAction SilentlyContinue
+                
+                if ($currentWallpaper -and $currentWallpaper.Wallpaper -eq $ImagePath) {
+                    exit 0 # Sucesso Verificado
+                } else {
+                    exit 1 # Falha na Verificacao
+                }
+            } catch {
+                exit 1 # Qualquer outro erro tambem e falha
+            }
 '@
             $workerScriptPath = Join-Path $env:TEMP "set_wallpaper_worker.ps1"
             $workerScriptContent | Out-File -FilePath $workerScriptPath -Encoding utf8
@@ -918,6 +918,7 @@ try {
         if (Test-Path $tempThumbDir) { Remove-Item -Path $tempThumbDir -Recurse -Force -EA SilentlyContinue }
     }
 }
+
 function Configure-Teams-Backgrounds {
     Test-NetConnectionSafe
     Stop-Process-AndWait -processName "msteams"; Stop-Process-AndWait -processName "ms-teams"
@@ -2771,5 +2772,6 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 

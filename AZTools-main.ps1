@@ -2730,7 +2730,7 @@ $featuresSearchBox.Add_TextChanged({
 
 # Evento da troca de Abas
 $tabControl.Add_SelectedIndexChanged({
-    $runnableTabs = @("Sistema e Manutencao", "(BETA) Recursos do Windows", "Personalizacao", "Softwares", "Otimizacao e Bloatware", "Endpoint Security")
+    $runnableTabs = @("Sistema e Manutencao", "(BETA) Recursos do Windows", "(BETA)Personalizacao", "Softwares", "Otimizacao e Bloatware", "Endpoint Security")
     $runCurrentTabButton.Enabled = $tabControl.SelectedTab.Text -in $runnableTabs
     if (($tabControl.SelectedTab.Text -eq "Limpeza de Arquivos e Registros") -and (-not $script:cleanupTabHasBeenAnalyzed)) {
         Update-Status "Executando analise inicial da aba de limpeza..."
@@ -2772,6 +2772,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

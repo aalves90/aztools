@@ -2307,9 +2307,11 @@ function Start-Execution {
     $script:loadingOverlay.Show($form)
 
 
-$requiredFunctions = @( 'Run-Task', 'Ensure-ChocolateyIsInstalled', 'Install-Chocolatey', 'Test-NetConnectionSafe', 'Install-App', 'Install-Softphone', 'Create-SingleWebShortcut', 'Handle-Hostname', 'Activate-Windows', 'Install-VCRedist', 'Install-DotNetFX', 'Force-WindowsUpdates', 'Configure-System-ThemeAndTaskbar', 'Configure-System-Wallpaper', 'Configure-Teams-Backgrounds', 'Install-OneDrive', 'Disable-Telemetry', 'Adjust-For-Performance', 'Clean-Prefetch', 'Empty-RecycleBin', 'Disk-Cleanup', 'Clean-TempFiles', 'Install-TrendMicroAgent', 'Run-SFC-Scan', 'Run-DISM-Repair', 'Run-Chkdsk', 'Flush-DNS-Cache', 'Reset-Winsock', 'Validate-And-Repair-OneDrive', 'Stop-Process-AndWait', 'Get-Image-List-From-Url', 'Download-File-Robust', 'Find-ExecutablePath', 'Get-DownloadsPath', 'Get-And-Convert-ShortcutIcon', 'Set-TargetReleaseVersion', 'Install-DotNetFX35', 'Install-DotNetFX48', 'Install-DirectX', 'Start-ResetWebExperience' )    $functionDefinitions = @{}
-$requiredFunctions | ForEach-Object { if(Test-Path "function:$_") { $functionDefinitions[$_] = (Get-Content "function:$_") } }
-    
+$requiredFunctions = @( 'Run-Task', 'Ensure-ChocolateyIsInstalled', 'Install-Chocolatey', 'Test-NetConnectionSafe', 'Install-App', 'Install-Softphone', 'Create-SingleWebShortcut', 'Handle-Hostname', 'Activate-Windows', 'Install-VCRedist', 'Install-DotNetFX', 'Force-WindowsUpdates', 'Configure-System-ThemeAndTaskbar', 'Configure-System-Wallpaper', 'Configure-Teams-Backgrounds', 'Install-OneDrive', 'Disable-Telemetry', 'Adjust-For-Performance', 'Clean-Prefetch', 'Empty-RecycleBin', 'Disk-Cleanup', 'Clean-TempFiles', 'Install-TrendMicroAgent', 'Run-SFC-Scan', 'Run-DISM-Repair', 'Run-Chkdsk', 'Flush-DNS-Cache', 'Reset-Winsock', 'Validate-And-Repair-OneDrive', 'Stop-Process-AndWait', 'Get-Image-List-From-Url', 'Download-File-Robust', 'Find-ExecutablePath', 'Get-DownloadsPath', 'Get-And-Convert-ShortcutIcon', 'Set-TargetReleaseVersion', 'Install-DotNetFX35', 'Install-DotNetFX48', 'Install-DirectX', 'Start-ResetWebExperience' )
+
+    $functionDefinitions = @{}
+	
+$requiredFunctions | ForEach-Object { if(Test-Path "function:$_") { $functionDefinitions[$_] = (Get-Content "function:$_") } }   
     $sb = {
         param($tasks, $functions, $stopOnFailFlag)
         
@@ -3165,19 +3167,3 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

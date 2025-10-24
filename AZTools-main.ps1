@@ -9,7 +9,7 @@ $script:config = @{
 	WallpapersUrl         = "https://azcorp.tech/img-public/wallpapers/"
     TeamsBackgroundsUrl   = "https://azcorp.tech/img-public/teams/"
     OneDriveUrl           = "https://go.microsoft.com/fwlink/p/?linkid=844652"
-    TargetReleaseVersion  = "24H2"
+    TargetReleaseVersion  = "25H2"
 
     Softphone = @{
         InstallerUrl    = "https://github.com/foriptecnologia/softphone/releases/download/v1.0.9/softphone.Setup.1.0.9.exe"
@@ -2423,7 +2423,7 @@ $systemTasks = [ordered]@{
     "Instalar .NET Framework 3.5"              = { Install-DotNetFX35 }
     "Instalar .NET Framework 4.8"              = { Install-DotNetFX48 }
     "Instalar DirectX"                         = { Install-DirectX }
-    "Definir Versao de Destino do Windows (24H2)" = { Set-TargetReleaseVersion }
+    "Definir Versao de Destino do Windows (25H2)" = { Set-TargetReleaseVersion }
     "Forcar Todas as Atualizacoes do Windows (Vai pedir para reiniciar)"  = { Force-WindowsUpdates }
 }
 
@@ -2882,6 +2882,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

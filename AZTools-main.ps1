@@ -1710,61 +1710,59 @@ function Uninstall-SelectedApps {
         $unStr = $item.Tag
 
         # 2. Criar o scriptblock para cada desinstalacao.
-        # Note o uso de ` (crase) para escapar variaveis que devem ser
-        # expandidas DEPOIS (dentro do job), como $cmd, $args, etc.
-        # A variavel $unStr e $appName são expandidas AGORA.
-        $actionBlock = [scriptblock]::Create("
-			if ([string]::IsNullOrWhiteSpace('$unStr')) { throw `"String de desinstalacao nao encontrada.`" }
+        
+		$actionBlock = [scriptblock]::Create(@"
+            if ([string]::IsNullOrWhiteSpace('$unStr')) { throw "String de desinstalacao nao encontrada." }
 
-			`$cmd = `"`"; `$args = `"`";
+            `$cmd = ""; `$args = "";
             `$uninstallString = '$unStr'.Trim('"')
 
             if (`$uninstallString -match '^(?i)choco uninstall') {
-                `$cmd = `"`$env:ProgramData\chocolatey\bin\choco.exe`"
+                `$cmd = "`$env:ProgramData\chocolatey\bin\choco.exe"
                 `$packageName = `$uninstallString.Split(' ')[-1]
-                `$args = `"uninstall `$packageName -y`"
+                `$args = "uninstall `$packageName -y"
                 
-                Update-Status `"... Executando (Choco): `"`$cmd`" `$args`"
+                Update-Status "... Executando (Choco): `"`$cmd`" `$args"
                 Start-Process -FilePath `$cmd -ArgumentList `$args -Wait -WindowStyle Hidden -ErrorAction Stop
 
             } 
             elseif (`$uninstallString -match '^(?i)winget uninstall') {
-                `$cmd = `"winget.exe`"
+                `$cmd = "winget.exe"
                 `$args = `$uninstallString.Replace('winget ', '') + ' --silent --disable-interactivity --accept-source-agreements'
 
-                Update-Status `"... Executando (Winget): `"`$cmd`" `$args`"
+                Update-Status "... Executando (Winget): `"`$cmd`" `$args"
                 Start-Process -FilePath `$cmd -ArgumentList `$args -Wait -WindowStyle Hidden -ErrorAction Stop
             }
             else {
                 if (`$uninstallString -match '^(?i)MsiExec.exe') {
-                    `$cmd = `"msiexec.exe`"
+                    `$cmd = "msiexec.exe"
                     `$args = `$uninstallString.Substring(11).Trim()
                 } 
-                elseif (`$uninstallString -match '^`"([^`"]+\.exe)`"') {
+                elseif (`$uninstallString -match '^"([^"]+\.exe)"') {
                     `$cmd = `$matches[1]
                     `$args = `$uninstallString.Substring(`$matches[0].Length).Trim()
                 }
-                elseif (`$uninstallString -match '^([^`"]+\.exe)') {
+                elseif (`$uninstallString -match '^([^"]+\.exe)') {
                     `$cmd = `$matches[1]
                     `$args = `$uninstallString.Substring(`$cmd.Length).Trim()
                 }
                 else {
-                    throw `"Nao foi possivel interpretar a string de desinstalacao: `$uninstallString`"
+                    throw "Nao foi possivel interpretar a string de desinstalacao: `$uninstallString"
                 }
                 
-                `$silentArgs = `"`"
+                `$silentArgs = ""
                 if (`$cmd -match 'msiexec' -and `$args -notmatch '(/qn|/quiet)') {
-                    `$args = `$args.Replace(`"/I`", `"/X`").Trim()
-                    `$silentArgs = `"/qn /norestart`"
+                    `$args = `$args.Replace("/I", "/X").Trim()
+                    `$silentArgs = "/qn /norestart"
                 } elseif (`$cmd -notmatch 'msiexec' -and `$args -notmatch '(/S|/silent|/quiet)') {
-                    `$silentArgs = `"/S`"
+                    `$silentArgs = "/S"
                 }
                 
-                `$finalArgs = `"`$args `$silentArgs`".Trim()
-                Update-Status `"... Executando: `"`$cmd`" `$finalArgs`"
+                `$finalArgs = "`$args `$silentArgs".Trim()
+                Update-Status "... Executando: `"`$cmd`" `$finalArgs"
                 Start-Process -FilePath `$cmd -ArgumentList `$finalArgs -Wait -ErrorAction Stop
             }
-        ") # Fim do scriptblock
+"@) # Fim do scriptblock
 
         # 3. Adicionar a tarefa à lista
         $customTasksToRun.Add(@{ Name = "Desinstalar $appName"; Definition = $actionBlock }) | Out-Null
@@ -1867,8 +1865,8 @@ function Analyze-Bloatware {
         try {
             $out = winget upgrade --include-unknown --accept-source-agreements
             $out | Select-Object -Skip 2 | ForEach-Object {
-                $line = $_ -split '\s{2,}'
-                if ($line.Count -ge 4) {
+			$line = $_ -split '\s\s+'
+			if ($line.Count -ge 4) {
                     $id = $line[1].Trim()
                     $ver = $line[3].Trim()
                     if (-not [string]::IsNullOrEmpty($id)) {
@@ -2275,18 +2273,21 @@ function Start-Execution {
 					$currentStatus = $item.SubItems[1].Text
 
     if ($currentStatus -eq 'Disabled') {
-        $actionBlock = [scriptblock]::Create("
+$actionBlock = [scriptblock]::Create(@"
             Enable-WindowsOptionalFeature -Online -FeatureName '$featureName' -All -NoRestart -Verbose -ErrorAction Stop
             `$status = Get-WindowsOptionalFeature -Online -FeatureName '$featureName'
-            if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }")
+            if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }
+"@)
         $tasksToProcess.Add(@{ Name = "Habilitando Recurso: $featureName"; Definition = $actionBlock }) | Out-Null
     }
     # Se estiver habilitado, a tarefa sera DESABILITAR
     elseif ($currentStatus -eq 'Enabled') {
-        $actionBlock = [scriptblock]::Create("
+        # AJUSTE: Alterado para "Here-String" (@"...")
+        $actionBlock = [scriptblock]::Create(@"
             Disable-WindowsOptionalFeature -Online -FeatureName '$featureName' -NoRestart -Verbose -ErrorAction Stop
             `$status = Get-WindowsOptionalFeature -Online -FeatureName '$featureName'
-            if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }")
+            if (`$status.RestartNeeded) { `$script:rebootRequired = `$true }
+"@)
         $tasksToProcess.Add(@{ Name = "Desabilitando Recurso: $featureName"; Definition = $actionBlock }) | Out-Null
     }
 }				
@@ -2543,7 +2544,7 @@ function Start-ResetWebExperience {
 }
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "AZTools 2 || Build 24102025.2"
+$form.Text = 'AZTools 2 || Build 24102025.2'
 $form.Size = New-Object System.Drawing.Size(1200, 700) 
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'None'
@@ -3307,10 +3308,3 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
-
-
-
-
-
-
-

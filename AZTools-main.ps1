@@ -1792,15 +1792,280 @@ function Check-WindowsFeaturesStatus {
     }
 }
 
-function Analyze-Bloatware { $panel = $bloatwarePanel; $panel.AnalyzeButton.Enabled = $false; $panel.CleanButton.Enabled = $false; $panel.Control.Items.Clear(); Run-Task "Verificar Apps Nativos (Winget)" { $upg = @{}; try { $out = winget upgrade --include-unknown --accept-source-agreements; $out | Select-Object -Skip 2 | % { $line = $_ -split '\s{2,}'; if ($line.Count -ge 4) { $id = $line[1].Trim(); $ver = $line[3].Trim(); if (-not [string]::IsNullOrEmpty($id)) { $upg[$id] = $ver } } } } catch {}; $all = $script:config.BloatwareApps; $panel.Control.BeginUpdate(); $i = 1; foreach ($e in $all.GetEnumerator()) { $tech = $e.Name; $friendly = $e.Value.FriendlyName; $wid = $e.Value.WingetId; $app = Get-AppxPackage -AllUsers -Name $tech -EA SilentlyContinue | Select -First 1; $item = New-Object System.Windows.Forms.ListViewItem($i.ToString()); $item.SubItems.Add($friendly) | Out-Null; if ($app) { if ($wid -and $upg.ContainsKey($wid)) { $item.SubItems.Add("Atualizacao Disponivel") | Out-Null; $item.Tag = @{ A = "Upgrade"; W = $wid; P = $app.PackageFullName } } else { $item.SubItems.Add("Instalado") | Out-Null; $item.ForeColor = [System.Drawing.Color]::LightGreen; $item.Tag = @{ A = "Remove"; P = $app.PackageFullName } } } else { $item.SubItems.Add("Nao Encontrado") | Out-Null; $item.ForeColor = [System.Drawing.Color]::DarkGray; if (-not [string]::IsNullOrWhiteSpace($wid)) { $item.Tag = @{ A = "Install"; W = $wid } } else { $item.Tag = @{ A = "None" } } }; $panel.Control.Items.Add($item) | Out-Null; $i++ }; $panel.Control.EndUpdate(); $panel.Control.AutoResizeColumns(1); $panel.CleanButton.Enabled = $true }; $panel.AnalyzeButton.Enabled = $true }
+function Analyze-Bloatware {
+    $panel = $bloatwarePanel
+    $panel.AnalyzeButton.Enabled = $false
+    $panel.CleanButton.Enabled = $false
+    $panel.Control.Items.Clear()
+    
+    Run-Task "Verificar Apps Nativos (Winget)" {
+        $upg = @{}
+        try {
+            $out = winget upgrade --include-unknown --accept-source-agreements
+            $out | Select-Object -Skip 2 | ForEach-Object {
+                $line = $_ -split '\s{2,}'
+                if ($line.Count -ge 4) {
+                    $id = $line[1].Trim()
+                    $ver = $line[3].Trim()
+                    if (-not [string]::IsNullOrEmpty($id)) {
+                        $upg[$id] = $ver
+                    }
+                }
+            }
+        } catch {}
+        
+        $all = $script:config.BloatwareApps
+        $panel.Control.BeginUpdate()
+        $i = 1
+        foreach ($e in $all.GetEnumerator()) {
+            $tech = $e.Name
+            $friendly = $e.Value.FriendlyName
+            $wid = $e.Value.WingetId
+            $app = Get-AppxPackage -AllUsers -Name $tech -EA SilentlyContinue | Select -First 1
+            
+            $item = New-Object System.Windows.Forms.ListViewItem($i.ToString())
+            $item.SubItems.Add($friendly) | Out-Null
+            
+            if ($app) {
+                if ($wid -and $upg.ContainsKey($wid)) {
+                    $item.SubItems.Add("Atualizacao Disponivel") | Out-Null
+                    $item.Tag = @{ A = "Upgrade"; W = $wid; P = $app.PackageFullName }
+                } else {
+                    $item.SubItems.Add("Instalado") | Out-Null
+                    $item.ForeColor = [System.Drawing.Color]::LightGreen
+                    $item.Tag = @{ A = "Remove"; P = $app.PackageFullName }
+                }
+            } else {
+                $item.SubItems.Add("Nao Encontrado") | Out-Null
+                $item.ForeColor = [System.Drawing.Color]::DarkGray
+                if (-not [string]::IsNullOrWhiteSpace($wid)) {
+                    $item.Tag = @{ A = "Install"; W = $wid }
+                } else {
+                    $item.Tag = @{ A = "None" }
+                }
+            }
+            $panel.Control.Items.Add($item) | Out-Null
+            $i++
+        }
+        $panel.Control.EndUpdate()
+        $panel.Control.AutoResizeColumns(1)
+        $panel.CleanButton.Enabled = $true
+    }
+    
+    $panel.AnalyzeButton.Enabled = $true
+}
 
-function Apply-BloatwareActions { $panel = $bloatwarePanel; $panel.CleanButton.Enabled = $false; $items = $panel.Control.CheckedItems; if ($items.Count -eq 0) { $panel.AnalyzeButton.Enabled = $true; return }; if (-not (Confirm-Action "Aplicar acoes em $($items.Count) apps?")) { $panel.AnalyzeButton.Enabled = $true; $panel.CleanButton.Enabled = $true; return }; Run-Task "Aplicar Acoes nos Apps Nativos" { foreach ($item in $items) { $info = $item.Tag; $name = $item.SubItems[1].Text; $action = $info.A; try { switch ($action) { "Remove" { Remove-AppxPackage -Package $info.P -AllUsers -EA Stop } "Install" { $args = "install --id $($info.W) -e --silent --force --disable-interactivity --accept-package-agreements --accept-source-agreements"; Start-Process winget.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden } "Upgrade" { $args = "upgrade --id $($info.W) -e --silent --force --disable-interactivity --accept-package-agreements --accept-source-agreements --include-unknown"; Start-Process winget.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden } } } catch {}; Start-Sleep -Seconds 2 } }; Analyze-Bloatware; $panel.AnalyzeButton.Enabled = $true }
+function Apply-BloatwareActions {
+    $panel = $bloatwarePanel
+    $panel.CleanButton.Enabled = $false
+    $items = $panel.Control.CheckedItems
+    
+    if ($items.Count -eq 0) {
+        $panel.AnalyzeButton.Enabled = $true
+        return
+    }
+    
+    if (-not (Confirm-Action "Aplicar acoes em $($items.Count) apps?")) {
+        $panel.AnalyzeButton.Enabled = $true
+        $panel.CleanButton.Enabled = $true
+        return
+    }
+    
+    Run-Task "Aplicar Acoes nos Apps Nativos" {
+        foreach ($item in $items) {
+            $info = $item.Tag
+            $name = $item.SubItems[1].Text
+            $action = $info.A
+            try {
+                switch ($action) {
+                    "Remove" {
+                        Remove-AppxPackage -Package $info.P -AllUsers -EA Stop
+                    }
+                    "Install" {
+                        $args = "install --id $($info.W) -e --silent --force --disable-interactivity --accept-package-agreements --accept-source-agreements"
+                        Start-Process winget.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+                    }
+                    "Upgrade" {
+                        $args = "upgrade --id $($info.W) -e --silent --force --disable-interactivity --accept-package-agreements --accept-source-agreements --include-unknown"
+                        Start-Process winget.exe -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+                    }
+                }
+            } catch {}
+            Start-Sleep -Seconds 2
+        }
+    }
+    
+    Analyze-Bloatware
+    $panel.AnalyzeButton.Enabled = $true
+}
 
-function Analyze-RegistryIssues { $analyzeRegButton.Enabled = $false; $backupRegButton.Enabled = $false; $cleanRegButton.Enabled = $false; $regCleanerListView.Items.Clear(); Run-Task "Analisando Problemas no Registro" { $res = [System.Collections.Generic.List[object]]::new(); $regCleanerListView.BeginUpdate(); try { $uninst = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"); foreach ($p in $uninst) { Get-ChildItem -Path $p -EA SilentlyContinue | % { $loc = $_.GetValue("InstallLocation"); if ($loc -and -not (Test-Path $loc)) { $res.Add(@{ Type = "Desinstalador Orfao"; Path = $_.PSPath; DisplayPath = $_.Name; Location = "Pasta: $loc"; Tag = $_.PSPath }) } } }; $run = @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Run", "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run"); foreach ($p in $run) { $key = Get-Item -Path $p -EA SilentlyContinue; if ($key) { foreach ($val in $key.GetValueNames()) { $cmd = $key.GetValue($val); if ($cmd -is [string]) { $cmdStr = $cmd.Trim(); $exe = $cmdStr; $match = [regex]::Match($cmdStr, '(\s[/-].*)'); if ($match.Success) { $exe = $cmdStr.Substring(0, $match.Index).Trim() }; $exe = $exe.Trim('"'); if ($exe -and -not (Test-Path $exe)) { $res.Add(@{ Type = "Inicializacao Invalida"; Path = $key.PSPath; DisplayPath = $key.Name; Location = "Valor: $val"; Tag = @{ Path = $key.PSPath; ValueName = $val } }) } } } } }; $mui = "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"; if (Test-Path $mui) { $key = Get-Item -Path $mui; foreach ($val in $key.GetValueNames()) { if ($val -like "*:\*") { $exe = $val.Split(',')[0]; if (-not (Test-Path $exe)) { $res.Add(@{ Type = "Cache MUI Obsoleto"; Path = $key.PSPath; DisplayPath = $key.Name; Location = "Executavel: $exe"; Tag = @{ Path = $key.PSPath; ValueName = $val } }) } } } }; $i = 1; foreach($issue in $res) { $item = New-Object System.Windows.Forms.ListViewItem($i.ToString()); $item.SubItems.Add($issue.Type) | Out-Null; $item.SubItems.Add($issue.DisplayPath) | Out-Null; $item.SubItems.Add($issue.Location) | Out-Null; $item.Tag = $issue.Tag; $item.Checked = $true; $regCleanerListView.Items.Add($item) | Out-Null; $i++ } } finally { $regCleanerListView.EndUpdate(); $regCleanerListView.AutoResizeColumns(1) }; if ($regCleanerListView.Items.Count -gt 0) { $backupRegButton.Enabled = $true; $cleanRegButton.Enabled = $true }; $analyzeRegButton.Enabled = $true; $count = $regCleanerListView.CheckedItems.Count; $regCleanerSummaryLabel.Text = "Total de itens selecionados: $count" }; $analyzeRegButton.Enabled = $true }
+function Analyze-RegistryIssues {
+    $analyzeRegButton.Enabled = $false
+    $backupRegButton.Enabled = $false
+    $cleanRegButton.Enabled = $false
+    $regCleanerListView.Items.Clear()
+    
+    Run-Task "Analisando Problemas no Registro" {
+        $res = [System.Collections.Generic.List[object]]::new()
+        $regCleanerListView.BeginUpdate()
+        
+        try {
+            # Verifica desinstaladores orfaos
+            $uninst = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
+            foreach ($p in $uninst) {
+                Get-ChildItem -Path $p -EA SilentlyContinue | ForEach-Object {
+                    $loc = $_.GetValue("InstallLocation")
+                    if ($loc -and -not (Test-Path $loc)) {
+                        $res.Add(@{ Type = "Desinstalador Orfao"; Path = $_.PSPath; DisplayPath = $_.Name; Location = "Pasta: $loc"; Tag = $_.PSPath })
+                    }
+                }
+            }
+            
+            # Verifica inicializacao invalida
+            $run = @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Run", "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run")
+            foreach ($p in $run) {
+                $key = Get-Item -Path $p -EA SilentlyContinue
+                if ($key) {
+                    foreach ($val in $key.GetValueNames()) {
+                        $cmd = $key.GetValue($val)
+                        if ($cmd -is [string]) {
+                            $cmdStr = $cmd.Trim()
+                            $exe = $cmdStr
+                            $match = [regex]::Match($cmdStr, '(\s[/-].*)')
+                            if ($match.Success) {
+                                $exe = $cmdStr.Substring(0, $match.Index).Trim()
+                            }
+                            $exe = $exe.Trim('"')
+                            
+                            # --- INICIO DA CORRECAO (Test-Path Robusto) ---
+                            $pathIsValid = $false
+                            $pathIsMissing = $false
+                            if ($exe) {
+                                try {
+                                    $pathIsValid = Test-Path $exe -ErrorAction Stop
+                                } catch [System.ArgumentException] {
+                                    $pathIsValid = $false
+                                    Update-Status "AVISO (Registro): Encontrado valor de inicializacao com formato invalido: $exe"
+                                } catch {
+                                    $pathIsValid = $false
+                                    Update-Status "AVISO (Registro): Erro ao testar o caminho: $exe. Detalhes: $($_.Exception.Message)"
+                                }
+                                if (-not $pathIsValid) {
+                                    $pathIsMissing = $true
+                                }
+                            }
+                            if ($pathIsMissing) {
+                            # --- FIM DA CORRECAO ---
+                                $res.Add(@{ Type = "Inicializacao Invalida"; Path = $key.PSPath; DisplayPath = $key.Name; Location = "Valor: $val"; Tag = @{ Path = $key.PSPath; ValueName = $val } })
+                            }
+                        }
+                    }
+                }
+            }
+            
+            # Verifica Cache MUI Obsoleto
+            $mui = "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"
+            if (Test-Path $mui) {
+                $key = Get-Item -Path $mui
+                foreach ($val in $key.GetValueNames()) {
+                    if ($val -like "*:\*") {
+                        $exe = $val.Split(',')[0]
+                        if (-not (Test-Path $exe)) {
+                            $res.Add(@{ Type = "Cache MUI Obsoleto"; Path = $key.PSPath; DisplayPath = $key.Name; Location = "Executavel: $exe"; Tag = @{ Path = $key.PSPath; ValueName = $val } })
+                        }
+                    }
+                }
+            }
+            
+            # Popula a lista
+            $i = 1
+            foreach ($issue in $res) {
+                $item = New-Object System.Windows.Forms.ListViewItem($i.ToString())
+                $item.SubItems.Add($issue.Type) | Out-Null
+                $item.SubItems.Add($issue.DisplayPath) | Out-Null
+                $item.SubItems.Add($issue.Location) | Out-Null
+                $item.Tag = $issue.Tag
+                $item.Checked = $true
+                $regCleanerListView.Items.Add($item) | Out-Null
+                $i++
+            }
+        } finally {
+            $regCleanerListView.EndUpdate()
+            $regCleanerListView.AutoResizeColumns(1)
+        }
+        
+        if ($regCleanerListView.Items.Count -gt 0) {
+            $backupRegButton.Enabled = $true
+            $cleanRegButton.Enabled = $true
+        }
+        $analyzeRegButton.Enabled = $true
+        $count = $regCleanerListView.CheckedItems.Count
+        $regCleanerSummaryLabel.Text = "Total de itens selecionados: $count"
+    }
+    $analyzeRegButton.Enabled = $true
+}
 
-function Backup-SelectedRegistryIssues { $items = $regCleanerListView.CheckedItems; if ($items.Count -eq 0) { return }; $dlg = New-Object System.Windows.Forms.SaveFileDialog; $dlg.Filter = "Arquivo de Registro (*.reg)|*.reg"; $dlg.FileName = "AZTools_RegBackup_$(Get-Date -f 'yyyy-MM-dd_HHmmss').reg"; if ($dlg.ShowDialog() -ne "OK") { return }; $file = $dlg.FileName; Run-Task "Backup de Chaves do Registro" { $keys = $items | % { if ($_.Tag -is [string]) { $_.Tag } elseif ($_.Tag -is [hashtable]) { $_.Tag.Path } } | Select -Unique; "Windows Registry Editor Version 5.00`r`n" | Out-File -FilePath $file -Encoding Unicode; foreach ($key in $keys) { $keyPath = $key.Replace("HKEY_CURRENT_USER", "HKCU").Replace("HKEY_LOCAL_MACHINE", "HKLM").Replace("Microsoft.PowerShell.Core\Registry::", ""); $tmp = "$env:TEMP\reg_temp.reg"; Start-Process reg -ArgumentList "export `"$keyPath`" `"$tmp`" /y" -Wait -NoNewWindow; Get-Content $tmp | Select-Object -Skip 2 | Add-Content -Path $file -Encoding Unicode; Remove-Item $tmp -Force -EA SilentlyContinue } } }
+function Backup-SelectedRegistryIssues {
+    $items = $regCleanerListView.CheckedItems
+    if ($items.Count -eq 0) {
+        return
+    }
+    
+    $dlg = New-Object System.Windows.Forms.SaveFileDialog
+    $dlg.Filter = "Arquivo de Registro (*.reg)|*.reg"
+    $dlg.FileName = "AZTools_RegBackup_$(Get-Date -f 'yyyy-MM-dd_HHmmss').reg"
+    
+    if ($dlg.ShowDialog() -ne "OK") {
+        return
+    }
+    
+    $file = $dlg.FileName
+    Run-Task "Backup de Chaves do Registro" {
+        $keys = $items | ForEach-Object {
+            if ($_.Tag -is [string]) {
+                $_.Tag
+            } elseif ($_.Tag -is [hashtable]) {
+                $_.Tag.Path
+            }
+        } | Select -Unique
+        
+        "Windows Registry Editor Version 5.00`r`n" | Out-File -FilePath $file -Encoding Unicode
+        
+        foreach ($key in $keys) {
+            $keyPath = $key.Replace("HKEY_CURRENT_USER", "HKCU").Replace("HKEY_LOCAL_MACHINE", "HKLM").Replace("Microsoft.PowerShell.Core\Registry::", "")
+            $tmp = "$env:TEMP\reg_temp.reg"
+            Start-Process reg -ArgumentList "export `"$keyPath`" `"$tmp`" /y" -Wait -NoNewWindow
+            Get-Content $tmp | Select-Object -Skip 2 | Add-Content -Path $file -Encoding Unicode
+            Remove-Item $tmp -Force -EA SilentlyContinue
+        }
+    }
+}
 
-function Clean-SelectedRegistryIssues { $items = $regCleanerListView.CheckedItems; if ($items.Count -eq 0) { return }; if (-not (Confirm-Action "Apagar $($items.Count) itens do registro?")) { return }; $cleanRegButton.Enabled = $false; Run-Task "Limpeza de Itens do Registro" { foreach ($item in ($items | Sort-Object { $_.SubItems[2].Text.Length } -Descending)) { try { if ($item.Tag -is [string]) { Remove-Item -Path $item.Tag -Recurse -Force -EA Stop } elseif ($item.Tag -is [hashtable]) { Remove-ItemProperty -Path $item.Tag.Path -Name $item.Tag.ValueName -Force -EA Stop } } catch {} }; Analyze-RegistryIssues }; $cleanRegButton.Enabled = $true }
+function Clean-SelectedRegistryIssues {
+    $items = $regCleanerListView.CheckedItems
+    if ($items.Count -eq 0) {
+        return
+    }
+    
+    if (-not (Confirm-Action "Apagar $($items.Count) itens do registro?")) {
+        return
+    }
+    
+    $cleanRegButton.Enabled = $false
+    Run-Task "Limpeza de Itens do Registro" {
+        foreach ($item in ($items | Sort-Object { $_.SubItems[2].Text.Length } -Descending)) {
+            try {
+                if ($item.Tag -is [string]) {
+                    Remove-Item -Path $item.Tag -Recurse -Force -EA Stop
+                } elseif ($item.Tag -is [hashtable]) {
+                    Remove-ItemProperty -Path $item.Tag.Path -Name $item.Tag.ValueName -Force -EA Stop
+                }
+            } catch {}
+        }
+        Analyze-RegistryIssues
+    }
+    $cleanRegButton.Enabled = $true
+}
 
 function Populate-AppsTreeView {
     $appsTreeView.Nodes.Clear()
@@ -2899,6 +3164,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

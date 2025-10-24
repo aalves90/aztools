@@ -2386,19 +2386,48 @@ function Clean-OrphanedRegistryEntries {
 }
 
 function Start-ResetWebExperience {
-    $packageName = "Microsoft.Windows.Search"
-    # Usamos -ErrorAction SilentlyContinue para o Get, pois o pacote pode nao existir
-    $package = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
+    # Lista de pacotes que afetam a Pesquisa do Windows
+    $packageNames = @(
+        "Microsoft.Windows.Client.WebExperience", # Lida com a UI de pesquisa web, widgets (mais provavel)
+        "Microsoft.Windows.Search"                # Lida com o indexador de pesquisa (alternativa)
+    )
     
-    if ($package) {
-        # Se o pacote for encontrado, tentamos redefini-lo
-        Write-Output "Pacote '$packageName' (Pesquisa do Windows) encontrado. Redefinindo..."
-        $package | Reset-AppxPackage -ErrorAction Stop
-        Write-Output "Redefinicao do Client WebExperience concluida."
-    } else {
-        # Se nao for encontrado, informamos como um erro para o Run-Task
-        throw "O pacote '$packageName' (Microsoft.Windows.Search) nao foi encontrado neste sistema."
+    $atLeastOneReset = $false
+    $packagesFound = 0
+    
+    foreach ($packageName in $packageNames) {
+        Write-Output "Procurando pacote: '$packageName'..."
+        $package = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
+        
+        if ($package) {
+            $packagesFound++
+            Write-Output "Pacote '$packageName' encontrado. Tentando redefinir..."
+            try {
+                $package | Reset-AppxPackage -ErrorAction Stop
+                Write-Output "Redefinicao de '$packageName' concluida."
+                $atLeastOneReset = $true
+            } catch {
+                # Se a redefinicao falhar (ex: permissao), apenas avisa, mas nao para o script
+                Write-Output "AVISO: Falha ao redefinir '$packageName'. Erro: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Output "Pacote '$packageName' nao encontrado. Pulando."
+        }
     }
+
+    # Se nenhum pacote da lista foi encontrado no sistema
+    if ($packagesFound -eq 0) {
+        throw "Nenhum pacote de pesquisa relevante (como 'Microsoft.Windows.Client.WebExperience' ou 'Microsoft.Windows.Search') foi encontrado neste sistema."
+    }
+    
+    # Se pelo menos um foi redefinido com sucesso
+    if (-not $atLeastOneReset) {
+        # Encontrou pacotes, mas a redefinicao de todos falhou
+        throw "Pacotes de pesquisa foram encontrados, mas falharam ao serem redefinidos. Verifique o log."
+    }
+    
+    # Se chegou aqui, $atLeastOneReset é $true
+    Write-Output "Redefinicao de pacotes de pesquisa concluida."
 }
 
 # --- CRIAcaO DO FORMULARio (continuacao) ---
@@ -3167,3 +3196,4 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+

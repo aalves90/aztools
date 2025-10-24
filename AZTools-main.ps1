@@ -2117,6 +2117,22 @@ function Clean-OrphanedRegistryEntries {
     }
 }
 
+function Start-ResetWebExperience {
+    $packageName = "Microsoft.Windows.Search"
+    # Usamos -ErrorAction SilentlyContinue para o Get, pois o pacote pode nao existir
+    $package = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
+    
+    if ($package) {
+        # Se o pacote for encontrado, tentamos redefini-lo
+        Write-Output "Pacote '$packageName' (Pesquisa do Windows) encontrado. Redefinindo..."
+        $package | Reset-AppxPackage -ErrorAction Stop
+        Write-Output "Redefinicao do Client WebExperience concluida."
+    } else {
+        # Se nao for encontrado, informamos como um erro para o Run-Task
+        throw "O pacote '$packageName' (Microsoft.Windows.Search) nao foi encontrado neste sistema."
+    }
+}
+
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AZTools 2 || Build 24102025.1"
@@ -2448,6 +2464,7 @@ $maintenanceTasks = [ordered]@{
     "Verificar Disco (Chkdsk - requer reinicializacao)" = @{ Action = { Run-Chkdsk }; Interactive = $true }
     "Limpar Cache de DNS"                          = { Flush-DNS-Cache }
     "Redefinir Catalogo Winsock (requer reinicializacao)" = { Reset-Winsock }
+	"Redefinir Pesquisa do Windows (WebExperience) - Quando menu iniciar estiver lento" = { Start-ResetWebExperience } 
     "Manutencao OneDrive"                          = @{ Action = { Validate-And-Repair-OneDrive }; Interactive = $true }
 }
 
@@ -2882,6 +2899,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

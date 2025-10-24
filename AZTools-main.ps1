@@ -157,6 +157,9 @@ $script:config = @{
         "Microsoft.BingWeather"                   = @{ FriendlyName = "Clima";                                 WingetId = "9WZDNCRFJ3Q2" }
         "Microsoft.BingNews"                      = @{ FriendlyName = "Noticias";                              WingetId = "9WZDNCRFHVFW" }
     }
+	# URLs para o instalador automatico do Winget (se necessario)
+    VCLibsUrl           = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
+    WingetInstallerUrl  = "https://github.com/microsoft/winget-cli/releases/download/v1.7.11132/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
 }
 
 # --- PREPARACAO DO AMBIENTE ---
@@ -176,6 +179,16 @@ public class DwmApi {
 }
 "@
 Add-Type -TypeDefinition $csharpDwmApi -ErrorAction SilentlyContinue
+
+# --- Bloco de Verificacao de Compatibilidade ---
+if ($PSVersionTable.PSVersion.Major -lt 5) {
+    [System.Windows.Forms.MessageBox]::Show("ERRO: Este script requer PowerShell 5.1 ou superior.`nSua versao atual e: $($PSVersionTable.PSVersion.Major).", "Versao Incompativel", "OK", "Error")
+    exit
+}
+if ([System.Environment]::OSVersion.Version.Major -lt 10) {
+    [System.Windows.Forms.MessageBox]::Show("ERRO: Este script e compativel apenas com Windows 10 e Windows 11.`nSistema operacional nao suportado.", "OS Incompativel", "OK", "Error")
+    exit
+}
 
 $csharpCode = @"
 using System.Runtime.InteropServices;
@@ -777,6 +790,53 @@ function Install-DirectX {
     Ensure-ChocolateyIsInstalled | Out-Null
     Update-Status "... Usando Chocolatey para instalar o DirectX..."
     & "$env:ProgramData\chocolatey\bin\choco.exe" install directx -y
+}
+
+function Ensure-WingetIsInstalled {
+    if (Get-Command winget.exe -ErrorAction SilentlyContinue) {
+        Update-Status "Winget (Gerenciador de Pacotes do Windows) ja esta instalado."
+        return $true
+    }
+    
+    Update-Status "AVISO: Winget (Gerenciador de Pacotes do Windows) nao foi encontrado."
+    Update-Status "Tentando instalar o Winget e suas dependencias..."
+    
+    Test-NetConnectionSafe
+    
+    $tempDir = Join-Path $env:TEMP "WingetInstall"
+    New-Item -Path $tempDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+    $vclibsPath = Join-Path $tempDir "VCLibs.appx"
+    $wingetPath = Join-Path $tempDir "Winget.msixbundle"
+
+    try {
+        # 1. Baixar e Instalar a Dependencia (VCLibs)
+        Update-Status "... Baixando VCLibs (Dependencia)..."
+        Download-File-Robust -Url $script:config.VCLibsUrl -OutFile $vclibsPath
+        Update-Status "... Instalando VCLibs..."
+        Add-AppxPackage -Path $vclibsPath -ErrorAction Stop
+        
+        # 2. Baixar e Instalar o Winget
+        Update-Status "... Baixando Winget (DesktopAppInstaller)..."
+        Download-File-Robust -Url $script:config.WingetInstallerUrl -OutFile $wingetPath
+        Update-Status "... Instalando Winget..."
+        Add-AppxPackage -Path $wingetPath -ErrorAction Stop
+
+        # 3. Verificacao Final
+        Update-Status "... Verificando a instalacao..."
+        if (Get-Command winget.exe -ErrorAction SilentlyContinue) {
+            Update-Status "Winget foi instalado com sucesso."
+            return $true
+        } else {
+            throw "O Winget foi instalado, mas o comando 'winget.exe' ainda nao foi encontrado. Tente reiniciar o script."
+        }
+    } catch {
+        throw "ERRO CRITICO ao tentar instalar o Winget. As funcoes de Bloatware podem falhar. Erro: $($_.Exception.Message)"
+    } finally {
+        if (Test-Path $tempDir) {
+            Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    return $false
 }
 function Set-TargetReleaseVersion {
     $targetVersion = $script:config.TargetReleaseVersion
@@ -1801,6 +1861,8 @@ function Analyze-Bloatware {
     $panel.Control.Items.Clear()
     
     Run-Task "Verificar Apps Nativos (Winget)" {
+	# Garante que o winget esta disponivel antes de tentar usa-lo
+        Ensure-WingetIsInstalled
         $upg = @{}
         try {
             $out = winget upgrade --include-unknown --accept-source-agreements
@@ -1874,6 +1936,17 @@ function Apply-BloatwareActions {
     }
     
     Run-Task "Aplicar Acoes nos Apps Nativos" {
+	# --- INICIO DA VALIDACAO DE DEPENDENCIA ---
+        # Garante que o winget esta disponivel antes de tentar usa-lo
+        $wingetAvailable = $false
+        try {
+            $wingetAvailable = Ensure-WingetIsInstalled
+        } catch {
+             # Se a instalacao falhar, apenas registra o erro mas nao para o Run-Task
+             # Isso permite que a funcao 'Remove' (que nao usa winget) ainda funcione.
+            Update-Status "ERRO: Falha ao instalar o Winget. Acoes de 'Install' ou 'Upgrade' podem falhar. Erro: $($_.Exception.Message)"
+        }
+		
         foreach ($item in $items) {
             $info = $item.Tag
             $name = $item.SubItems[1].Text
@@ -3213,5 +3286,6 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 

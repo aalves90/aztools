@@ -1637,63 +1637,84 @@ function Uninstall-SelectedApps {
     if ($toUninstall.Count -eq 0) { $uninstallRegButton.Enabled = $true; return }
     if (-not (Confirm-Action "Desinstalar $($toUninstall.Count) app(s)?")) { $uninstallRegButton.Enabled = $true; return }
 
-    # Pausa o timer de inatividade durante a desinstalacao
+    # Pausa o timer (Correto)
     $script:shutdownTimer.Stop()
+
+    # --- INICIO DA CORRECAO ---
+    
+    # 1. Criar lista de tarefas para o Start-Execution
+    $customTasksToRun = [System.Collections.ArrayList]::new()
 
     foreach ($item in $toUninstall) { 
         $appName = $item.SubItems[2].Text
         $unStr = $item.Tag
-        
-        Run-Task "Desinstalar $appName" { 
-            if ([string]::IsNullOrWhiteSpace($unStr)) { throw "String de desinstalacao nao encontrada." }
 
-            $cmd = ""; $args = "";
-            $uninstallString = $unStr.Trim('"')
+        # 2. Criar o scriptblock para cada desinstalacao.
+        # Note o uso de ` (crase) para escapar variaveis que devem ser
+        # expandidas DEPOIS (dentro do job), como $cmd, $args, etc.
+        # A variavel $unStr e $appName são expandidas AGORA.
+        $actionBlock = [scriptblock]::Create("
+            if ([string]::IsNullOrWhiteSpace(`"$unStr`")) { throw `"String de desinstalacao nao encontrada.`" }
 
-            if ($uninstallString -match '^(?i)choco uninstall') {
-                $cmd = "$env:ProgramData\chocolatey\bin\choco.exe"
-                $packageName = $uninstallString.Split(' ')[-1]
-                $args = "uninstall $packageName -y"
+            `$cmd = `"`"; `$args = `"`";
+            `$uninstallString = `"$unStr`".Trim('`"')
+
+            if (`$uninstallString -match '^(?i)choco uninstall') {
+                `$cmd = `"`$env:ProgramData\chocolatey\bin\choco.exe`"
+                `$packageName = `$uninstallString.Split(' ')[-1]
+                `$args = `"uninstall `$packageName -y`"
                 
-                Update-Status "... Executando (Choco): `"$cmd`" $args"
-                Start-Process -FilePath $cmd -ArgumentList $args -Wait -WindowStyle Hidden -ErrorAction Stop
+                Update-Status `"... Executando (Choco): `"`$cmd`" `$args`"
+                Start-Process -FilePath `$cmd -ArgumentList `$args -Wait -WindowStyle Hidden -ErrorAction Stop
 
             } 
+            elseif (`$uninstallString -match '^(?i)winget uninstall') {
+                `$cmd = `"winget.exe`"
+                `$args = `$uninstallString.Replace('winget ', '') + ' --silent --disable-interactivity --accept-source-agreements'
+
+                Update-Status `"... Executando (Winget): `"`$cmd`" `$args`"
+                Start-Process -FilePath `$cmd -ArgumentList `$args -Wait -WindowStyle Hidden -ErrorAction Stop
+            }
             else {
-                if ($uninstallString -match '^(?i)MsiExec.exe') {
-                    $cmd = "msiexec.exe"
-                    $args = $uninstallString.Substring(11).Trim()
+                if (`$uninstallString -match '^(?i)MsiExec.exe') {
+                    `$cmd = `"msiexec.exe`"
+                    `$args = `$uninstallString.Substring(11).Trim()
                 } 
-                elseif ($uninstallString -match '^"([^"]+\.exe)"') {
-                    $cmd = $matches[1]
-                    $args = $uninstallString.Substring($matches[0].Length).Trim()
+                elseif (`$uninstallString -match '^`"([^`"]+\.exe)`"') {
+                    `$cmd = `$matches[1]
+                    `$args = `$uninstallString.Substring(`$matches[0].Length).Trim()
                 }
-                elseif ($uninstallString -match '^([^"]+\.exe)') {
-                    $cmd = $matches[1]
-                    $args = $uninstallString.Substring($cmd.Length).Trim()
+                elseif (`$uninstallString -match '^([^`"]+\.exe)') {
+                    `$cmd = `$matches[1]
+                    `$args = `$uninstallString.Substring(`$cmd.Length).Trim()
                 }
                 else {
-                    throw "Nao foi possivel interpretar a string de desinstalacao: $uninstallString"
+                    throw `"Nao foi possivel interpretar a string de desinstalacao: `$uninstallString`"
                 }
                 
-                $silentArgs = ""
-                if ($cmd -match 'msiexec' -and $args -notmatch '(/qn|/quiet)') {
-                    $args = $args.Replace("/I", "/X").Trim()
-                    $silentArgs = "/qn /norestart"
-                } elseif ($cmd -notmatch 'msiexec' -and $args -notmatch '(/S|/silent|/quiet)') {
-                    $silentArgs = "/S"
+                `$silentArgs = `"`"
+                if (`$cmd -match 'msiexec' -and `$args -notmatch '(/qn|/quiet)') {
+                    `$args = `$args.Replace(`"/I`", `"/X`").Trim()
+                    `$silentArgs = `"/qn /norestart`"
+                } elseif (`$cmd -notmatch 'msiexec' -and `$args -notmatch '(/S|/silent|/quiet)') {
+                    `$silentArgs = `"/S`"
                 }
                 
-                $finalArgs = "$args $silentArgs".Trim()
-                Update-Status "... Executando: `"$cmd`" $finalArgs"
-                Start-Process -FilePath $cmd -ArgumentList $finalArgs -Wait -ErrorAction Stop
+                `$finalArgs = `"`$args `$silentArgs`".Trim()
+                Update-Status `"... Executando: `"`$cmd`" `$finalArgs`"
+                Start-Process -FilePath `$cmd -ArgumentList `$finalArgs -Wait -ErrorAction Stop
             }
-        }
+        ") # Fim do scriptblock
+
+        # 3. Adicionar a tarefa à lista
+        $customTasksToRun.Add(@{ Name = "Desinstalar $appName"; Definition = $actionBlock }) | Out-Null
     }
 
-    # --- INICIO DA CORRECAO ---
-    # A logica de "Refresh-AppLists" foi movida para ca para resolver o erro.
-    Update-Status "Desinstalacoes concluidas. Atualizando listas de aplicativos..."
+    # 4. Chamar o Start-Execution, que cuidará do job em segundo plano,
+    # da atualização das listas e do reinício do timer automaticamente.
+    Start-Execution -CustomTasks $customTasksToRun
+
+Update-Status "Desinstalacoes concluidas. Atualizando listas de aplicativos..."
     Run-Task "Atualizando lista de apps desatualizados (Choco)" { Scan-OutdatedChocoApps }
     Run-Task "Atualizando lista de todos os apps (Registro)" { Scan-RegistryApps }
     Run-Task "Atualizando status na arvore de softwares" { Populate-AppsTreeView }
@@ -3163,6 +3184,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

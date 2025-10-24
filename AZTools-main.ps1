@@ -2385,48 +2385,65 @@ function Clean-OrphanedRegistryEntries {
     }
 }
 
+# --- AJUSTE E DEPOIS ---
 function Start-ResetWebExperience {
-    # Lista de pacotes que afetam a Pesquisa do Windows
-    $packageNames = @(
-        "Microsoft.Windows.Client.WebExperience", # Lida com a UI de pesquisa web, widgets (mais provavel)
-        "Microsoft.Windows.Search"                # Lida com o indexador de pesquisa (alternativa)
+    # Lista de PADROES (wildcards) para encontrar pacotes de pesquisa
+    # Esta abordagem é mais agressiva e tentará encontrar qualquer pacote que corresponda
+    $patterns = @(
+        "*WebExperience*",  # Cobre 'Microsoft.Windows.Client.WebExperience' e outras variacoes
+        "*SearchApp*",      # Cobre 'Microsoft.Windows.SearchApp' (comum no Win 11)
+        "*Windows.Search*"  # Cobre 'Microsoft.Windows.Search' (comum no Win 10)
     )
     
-    $atLeastOneReset = $false
-    $packagesFound = 0
+    # Usamos um HashSet para armazenar nomes de pacotes unicos
+    $packagesToReset = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     
-    foreach ($packageName in $packageNames) {
-        Write-Output "Procurando pacote: '$packageName'..."
-        $package = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
-        
-        if ($package) {
-            $packagesFound++
-            Write-Output "Pacote '$packageName' encontrado. Tentando redefinir..."
-            try {
-                $package | Reset-AppxPackage -ErrorAction Stop
-                Write-Output "Redefinicao de '$packageName' concluida."
-                $atLeastOneReset = $true
-            } catch {
-                # Se a redefinicao falhar (ex: permissao), apenas avisa, mas nao para o script
-                Write-Output "AVISO: Falha ao redefinir '$packageName'. Erro: $($_.Exception.Message)"
+    Write-Output "Procurando pacotes de pesquisa usando padroes: $($patterns -join ', ')..."
+    
+    foreach ($pattern in $patterns) {
+        try {
+            # Procura pacotes que NAO sejam componentes criticos do sistema (SignatureKind -ne "System")
+            $foundPackages = Get-AppxPackage -Name $pattern -ErrorAction SilentlyContinue | Where-Object { $_.SignatureKind -ne "System" }
+            
+            foreach ($pkg in $foundPackages) {
+                # Adiciona o nome completo (FullName) à lista. O HashSet cuida da duplicacao.
+                if ($packagesToReset.Add($pkg.PackageFullName)) {
+                     Write-Output "Pacote relevante encontrado: $($pkg.PackageFullName)"
+                }
             }
-        } else {
-            Write-Output "Pacote '$packageName' nao encontrado. Pulando."
+        } catch {
+            Write-Output "AVISO: Erro ao procurar pelo padrao '$pattern'. Erro: $($_.Exception.Message)"
         }
     }
 
-    # Se nenhum pacote da lista foi encontrado no sistema
-    if ($packagesFound -eq 0) {
-        throw "Nenhum pacote de pesquisa relevante (como 'Microsoft.Windows.Client.WebExperience' ou 'Microsoft.Windows.Search') foi encontrado neste sistema."
+    # Se, apos verificar todos os padroes, nenhum pacote foi encontrado
+    if ($packagesToReset.Count -eq 0) {
+        throw "Nenhum pacote de pesquisa relevante (usando os padroes: $($patterns -join ', ')) foi encontrado neste sistema."
     }
     
-    # Se pelo menos um foi redefinido com sucesso
+    $atLeastOneReset = $false
+    
+    Write-Output "Iniciando redefinicao de $($packagesToReset.Count) pacote(s)..."
+    
+    foreach ($packageName in $packagesToReset) {
+        Write-Output "Tentando redefinir: '$packageName'..."
+        try {
+            # Pega o pacote pelo nome completo (que é unico) e o redefine
+            $package = Get-AppxPackage -Name $packageName -ErrorAction Stop
+            $package | Reset-AppxPackage -ErrorAction Stop
+            Write-Output "Redefinicao de '$packageName' concluida."
+            $atLeastOneReset = $true
+        } catch {
+            # Se a redefinicao falhar (ex: permissao), apenas avisa, mas nao para o script
+            Write-Output "AVISO: Falha ao redefinir '$packageName'. Erro: $($_.Exception.Message)"
+        }
+    }
+
+    # Se encontrou pacotes, mas NENHUM pode ser redefinido
     if (-not $atLeastOneReset) {
-        # Encontrou pacotes, mas a redefinicao de todos falhou
         throw "Pacotes de pesquisa foram encontrados, mas falharam ao serem redefinidos. Verifique o log."
     }
     
-    # Se chegou aqui, $atLeastOneReset é $true
     Write-Output "Redefinicao de pacotes de pesquisa concluida."
 }
 
@@ -3196,4 +3213,5 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 

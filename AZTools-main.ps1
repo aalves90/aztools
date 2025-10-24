@@ -2458,6 +2458,7 @@ function Clean-OrphanedRegistryEntries {
     }
 }
 
+# --- AJUSTE E DEPOIS ---
 function Start-ResetWebExperience {
     
     $atLeastOneActionSucceeded = $false
@@ -2540,7 +2541,6 @@ function Start-ResetWebExperience {
     
     Write-Output "Redefinicao de pesquisa concluida com sucesso."
 }
-
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "AZTools 2 || Build 24102025.2"
@@ -3307,6 +3307,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

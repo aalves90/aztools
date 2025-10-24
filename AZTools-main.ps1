@@ -1714,10 +1714,10 @@ function Uninstall-SelectedApps {
         # expandidas DEPOIS (dentro do job), como $cmd, $args, etc.
         # A variavel $unStr e $appName são expandidas AGORA.
         $actionBlock = [scriptblock]::Create("
-            if ([string]::IsNullOrWhiteSpace(`"$unStr`")) { throw `"String de desinstalacao nao encontrada.`" }
+			if ([string]::IsNullOrWhiteSpace('$unStr')) { throw `"String de desinstalacao nao encontrada.`" }
 
-            `$cmd = `"`"; `$args = `"`";
-            `$uninstallString = `"$unStr`".Trim('`"')
+			`$cmd = `"`"; `$args = `"`";
+            `$uninstallString = '$unStr'.Trim('"')
 
             if (`$uninstallString -match '^(?i)choco uninstall') {
                 `$cmd = `"`$env:ProgramData\chocolatey\bin\choco.exe`"
@@ -3307,6 +3307,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

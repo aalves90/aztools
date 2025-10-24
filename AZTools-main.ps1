@@ -2458,66 +2458,87 @@ function Clean-OrphanedRegistryEntries {
     }
 }
 
-# --- AJUSTE E DEPOIS ---
 function Start-ResetWebExperience {
-    # Lista de PADROES (wildcards) para encontrar pacotes de pesquisa
-    # Esta abordagem é mais agressiva e tentará encontrar qualquer pacote que corresponda
-    $patterns = @(
-        "*WebExperience*",  # Cobre 'Microsoft.Windows.Client.WebExperience' e outras variacoes
-        "*SearchApp*",      # Cobre 'Microsoft.Windows.SearchApp' (comum no Win 11)
-        "*Windows.Search*"  # Cobre 'Microsoft.Windows.Search' (comum no Win 10)
-    )
     
-    # Usamos um HashSet para armazenar nomes de pacotes unicos
-    $packagesToReset = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $atLeastOneActionSucceeded = $false
+    $errors = [System.Collections.ArrayList]::new()
     
-    Write-Output "Procurando pacotes de pesquisa usando padroes: $($patterns -join ', ')..."
-    
-    foreach ($pattern in $patterns) {
-        try {
-            # Procura pacotes que NAO sejam componentes criticos do sistema (SignatureKind -ne "System")
+    # --- TENTATIVA 1: Redefinir pacotes Appx (se existirem) ---
+    Write-Output "Tentativa 1: Procurando pacotes Appx de pesquisa (WebExperience, SearchApp)..."
+    try {
+        $patterns = @("*WebExperience*", "*SearchApp*", "*Windows.Search*")
+        $packagesToReset = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        
+        foreach ($pattern in $patterns) {
             $foundPackages = Get-AppxPackage -Name $pattern -ErrorAction SilentlyContinue | Where-Object { $_.SignatureKind -ne "System" }
-            
             foreach ($pkg in $foundPackages) {
-                # Adiciona o nome completo (FullName) à lista. O HashSet cuida da duplicacao.
                 if ($packagesToReset.Add($pkg.PackageFullName)) {
-                     Write-Output "Pacote relevante encontrado: $($pkg.PackageFullName)"
+                     Write-Output "Pacote Appx relevante encontrado: $($pkg.PackageFullName)"
                 }
             }
-        } catch {
-            Write-Output "AVISO: Erro ao procurar pelo padrao '$pattern'. Erro: $($_.Exception.Message)"
         }
+
+        if ($packagesToReset.Count -gt 0) {
+            Write-Output "Iniciando redefinicao de $($packagesToReset.Count) pacote(s) Appx..."
+            foreach ($packageName in $packagesToReset) {
+                try {
+                    $package = Get-AppxPackage -Name $packageName -ErrorAction Stop
+                    $package | Reset-AppxPackage -ErrorAction Stop
+                    Write-Output "Redefinicao de '$packageName' concluida."
+                    $atLeastOneActionSucceeded = $true
+                } catch {
+                    $errMsg = "AVISO: Falha ao redefinir '$packageName'. Erro: $($_.Exception.Message)"
+                    Write-Output $errMsg
+                    $errors.Add($errMsg) | Out-Null
+                }
+            }
+        } else {
+            Write-Output "Nenhum pacote Appx de pesquisa encontrado. Pulando para a Tentativa 2."
+        }
+    } catch {
+        $errMsg = "AVISO: Falha inesperada durante a busca por pacotes Appx. Erro: $($_.Exception.Message)"
+        Write-Output $errMsg
+        $errors.Add($errMsg) | Out-Null
     }
 
-    # Se, apos verificar todos os padroes, nenhum pacote foi encontrado
-    if ($packagesToReset.Count -eq 0) {
-        throw "Nenhum pacote de pesquisa relevante (usando os padroes: $($patterns -join ', ')) foi encontrado neste sistema."
-    }
-    
-    $atLeastOneReset = $false
-    
-    Write-Output "Iniciando redefinicao de $($packagesToReset.Count) pacote(s)..."
-    
-    foreach ($packageName in $packagesToReset) {
-        Write-Output "Tentando redefinir: '$packageName'..."
-        try {
-            # Pega o pacote pelo nome completo (que é unico) e o redefine
-            $package = Get-AppxPackage -Name $packageName -ErrorAction Stop
-            $package | Reset-AppxPackage -ErrorAction Stop
-            Write-Output "Redefinicao de '$packageName' concluida."
-            $atLeastOneReset = $true
-        } catch {
-            # Se a redefinicao falhar (ex: permissao), apenas avisa, mas nao para o script
-            Write-Output "AVISO: Falha ao redefinir '$packageName'. Erro: $($_.Exception.Message)"
+    # --- TENTATIVA 2: Reconstruir o Índice do Windows Search (WSearch) ---
+    Write-Output "Tentativa 2: Reconstruindo o indice do servico Windows Search (WSearch)..."
+    try {
+        $service = Get-Service -Name "WSearch" -ErrorAction Stop
+        if ($service.Status -ne 'Stopped') {
+            Write-Output "Parando o servico 'WSearch'..."
+            Stop-Service -Name "WSearch" -Force -ErrorAction Stop
+            Write-Output "Servico 'WSearch' parado."
         }
+        
+        $indexPath = "$env:ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb"
+        if (Test-Path $indexPath) {
+            Write-Output "Removendo o banco de dados do indice atual ($indexPath)..."
+            Remove-Item -Path $indexPath -Force -ErrorAction Stop
+            Write-Output "Banco de dados do indice removido."
+        } else {
+            Write-Output "Banco de dados do indice nao encontrado (o que e normal se o servico nunca rodou). Pulando remocao."
+        }
+        
+        Write-Output "Reiniciando o servico 'WSearch' para forcar a reconstrucao."
+        Start-Service -Name "WSearch" -ErrorAction Stop
+        $atLeastOneActionSucceeded = $true
+        Write-Output "O indice do Windows Search comecara a ser reconstruido em segundo plano (isso pode levar alguns minutos)."
+    } catch {
+        $errMsg = "ERRO: Falha ao tentar reconstruir o indice do Windows Search. Erro: $($_.Exception.Message)"
+        Write-Output $errMsg
+        $errors.Add($errMsg) | Out-Null
+        # Tenta reiniciar o serviço por garantia
+        try { Start-Service -Name "WSearch" -ErrorAction SilentlyContinue } catch {}
     }
 
-    # Se encontrou pacotes, mas NENHUM pode ser redefinido
-    if (-not $atLeastOneReset) {
-        throw "Pacotes de pesquisa foram encontrados, mas falharam ao serem redefinidos. Verifique o log."
+    # --- Verificacao Final ---
+    if (-not $atLeastOneActionSucceeded) {
+        $allErrors = $errors -join "`n"
+        throw "Falha em TODAS as tentativas de redefinir a pesquisa (Appx e Servico). Erros: $allErrors"
     }
     
-    Write-Output "Redefinicao de pacotes de pesquisa concluida."
+    Write-Output "Redefinicao de pesquisa concluida com sucesso."
 }
 
 # --- CRIAcaO DO FORMULARio (continuacao) ---
@@ -3286,6 +3307,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

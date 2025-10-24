@@ -1711,26 +1711,7 @@ function Uninstall-SelectedApps {
     }
 
     # 4. Chamar o Start-Execution, que cuidará do job em segundo plano,
-    # da atualização das listas e do reinício do timer automaticamente.
-    Start-Execution -CustomTasks $customTasksToRun
-
-Update-Status "Desinstalacoes concluidas. Atualizando listas de aplicativos..."
-    Run-Task "Atualizando lista de apps desatualizados (Choco)" { Scan-OutdatedChocoApps }
-    Run-Task "Atualizando lista de todos os apps (Registro)" { Scan-RegistryApps }
-    Run-Task "Atualizando status na arvore de softwares" { Populate-AppsTreeView }
-    Update-Status "Listas de aplicativos atualizadas."
-
-    # A logica de "$resetShutdownTimer" foi movida para ca para resolver o erro.
-    $script:shutdownSecondsRemaining = 15 * 60
-    try {
-        $shutdownLabel = $form.Controls.Find('shutdownLabel', $true)[0]
-        if ($shutdownLabel.IsHandleCreated -and $shutdownLabel.ForeColor -ne $script:themeColors.Foreground) {
-            $shutdownLabel.ForeColor = $script:themeColors.Foreground
-        }
-    } catch {}
-    $script:shutdownTimer.Start()
-    # --- FIM DA CORRECAO ---
-}
+   Start-Execution -CustomTasks $customTasksToRun
 
 function Refresh-AppLists {
     Update-Status "Execucao finalizada. Atualizando listas de aplicativos..."
@@ -3184,6 +3165,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

@@ -2119,7 +2119,7 @@ function Clean-OrphanedRegistryEntries {
 
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "AZTools 2 || Build 08102025.1"
+$form.Text = "AZTools 2 || Build 24102025.1"
 $form.Size = New-Object System.Drawing.Size(1200, 700) 
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'None'
@@ -2882,6 +2882,7 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+
 
 
 

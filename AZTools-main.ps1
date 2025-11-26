@@ -2,7 +2,6 @@
 # Automacoes para Windows
 # Criado pensando em facilitar a vida na AZCorp Tech
 # ===================================================================================
-
 # --- BLOCO DE CONFIGURACAO CENTRAL ---
 $script:config = @{
 	LogoUrl               = "https://i.postimg.cc/mgwTK81L/favicon-48x48.png"
@@ -3809,3 +3808,4 @@ $form.Add_Shown({
 Apply-DarkTheme -Control $form
 [void]$form.ShowDialog()
 $form.Dispose()
+

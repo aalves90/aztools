@@ -13,7 +13,6 @@ $script:config = @{
 
     Softphone = @{
         InstallerUrl    = "https://github.com/foriptecnologia/softphone/releases/download/v1.0.9/softphone.Setup.1.0.9.exe"
-        InstallerHash   = "COLOQUE_O_HASH_SHA256_DO_INSTALADOR_AQUI"
         Executable      = "softphone.exe"
     }
     
@@ -58,79 +57,208 @@ $script:config = @{
     )
     
     CacheDatabase = @{
-        # --- Navegadores ---
-        "*Google Chrome*" = @{
+        # ==========================================================
+        # NAVEGADORES (Base Chromium, Gecko e Legacy)
+        # ==========================================================
+		"Microsoft Edge" = @{
+            Processes = @("msedge", "msedge_proxy", "pwahelper");
+            # O '*' garante que pegue todos os perfis (Default, Profile 1, etc.)
+            "Cache de Internet (Geral)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Cache", "$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Network\Cache") }
+            "Code Cache (JS Compilado - Pesado)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Code Cache") }
+            "Service Worker (Apps/Sites Pesados)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Service Worker\CacheStorage", "$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Service Worker\ScriptCache") }
+            "GPU & Shader Cache" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\GPUCache", "$env:LOCALAPPDATA\Microsoft\Edge\User Data\ShaderCache") }
+            "Arquivos Temporários (Blob)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Blob Storage") }
+            "Cookies e Histórico" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\Network\Cookies", "$env:LOCALAPPDATA\Microsoft\Edge\User Data\*\History") }
+        }
+        "Google Chrome" = @{
             Processes = @("chrome");
-            "Cache de Navegacao" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache", "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Code Cache\js") }
-            "Historico de Navegacao" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\Default\History") }
-            "Cookies" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Network\Cookies") }
+            "Cache de Internet (Geral)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Cache", "$env:LOCALAPPDATA\Google\Chrome\User Data\*\Network\Cache") }
+            "Code Cache (JS Compilado)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Code Cache") }
+            "Service Worker (Apps/Sites)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Service Worker\CacheStorage", "$env:LOCALAPPDATA\Google\Chrome\User Data\*\Service Worker\ScriptCache") }
+            "GPU & Shader Cache" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\*\GPUCache", "$env:LOCALAPPDATA\Google\Chrome\User Data\ShaderCache") }
+            "Cookies e Histórico" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Google\Chrome\User Data\*\Network\Cookies", "$env:LOCALAPPDATA\Google\Chrome\User Data\*\History") }
         }
-        "*Microsoft Edge*" = @{
-            Processes = @("msedge");
-            "Cache de Navegacao" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache") }
-            "Historico de Navegacao" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\History") }
-            "Cookies" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Network\Cookies") }
+        "Opera Stable" = @{ 
+            Processes = @("opera", "opera_crashreporter");
+            # Opera as vezes usa 'Opera Stable' ou apenas 'Opera' dependendo da versao
+            "Cache de Navegacao" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Opera Software\Opera Stable\Cache", "$env:LOCALAPPDATA\Opera Software\Opera Stable\Default\Cache", "$env:LOCALAPPDATA\Opera Software\Opera Stable\*\Cache", "$env:LOCALAPPDATA\Opera Software\Opera Stable\*\Code Cache") }
+            "Service Worker" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Opera Software\Opera Stable\Default\Service Worker\CacheStorage", "$env:LOCALAPPDATA\Opera Software\Opera Stable\Service Worker\CacheStorage") }
+            "GPU Cache" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Opera Software\Opera Stable\GPUCache", "$env:LOCALAPPDATA\Opera Software\Opera Stable\Default\GPUCache") }
         }
-        "*Mozilla Firefox*" = @{
+        "Internet Explorer (Legacy)" = @{
+            Processes = @("iexplore");
+            "Arquivos Temp. Internet" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Windows\INetCache\IE", "$env:LOCALAPPDATA\Microsoft\Windows\INetCache\Low\IE") }
+            "Cookies" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Windows\INetCookies", "$env:APPDATA\Microsoft\Windows\Cookies") }
+            "Historico" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Windows\History") }
+        }
+        "Mozilla Firefox" = @{
             Processes = @("firefox");
             "Cache de Navegacao" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Mozilla\Firefox\Profiles\*\cache2", "$env:LOCALAPPDATA\Mozilla\Firefox\Profiles\*\startupCache") }
+            "Crash Reports" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Mozilla\Firefox\Crash Reports") }
         }
-        "*Opera*" = @{
-            Processes = @("opera");
-            "Cache de Navegacao" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Opera Software\Opera Stable\Cache") }
-            "Historico de Navegacao" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Opera Software\Opera Stable\History") }
-            "Cookies" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Opera Software\Opera Stable\Network\Cookies") }
+        "Brave Browser" = @{
+            Processes = @("brave");
+            "Cache de Navegacao" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Cache") }
         }
-        # --- Comunicacao e Produtividade ---
-        "*Microsoft Teams*" = @{
+        "Vivaldi" = @{
+            Processes = @("vivaldi");
+            "Cache de Navegacao" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Vivaldi\User Data\Default\Cache") }
+        }
+
+        # ==========================================================
+        # COMUNICACAO E REUNIOES
+        # ==========================================================
+        "Microsoft Teams (Novo)" = @{
             Processes = @("ms-teams", "msteams");
-            "Cache Geral (Novo Teams)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams") }
-            "Cache Geral (Teams Classico)" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Microsoft\Teams\Cache", "$env:APPDATA\Microsoft\Teams\Code Cache", "$env:APPDATA\Microsoft\Teams\GPUCache") }
+            "Cache Geral" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams") }
+            "Logs de Diagnostico" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Packages\MSTeams_8wekyb3d8bbwe\LocalCache\Microsoft\MSTeams\Logs") }
         }
-        "*Zoom*" = @{
-            Processes = @("Zoom");
-            "Cache de Dados" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Zoom\data\Cache") }
+        "Microsoft Teams (Classico)" = @{
+            Processes = @("Teams");
+            "Cache Geral" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Microsoft\Teams\Cache", "$env:APPDATA\Microsoft\Teams\Code Cache", "$env:APPDATA\Microsoft\Teams\GPUCache", "$env:APPDATA\Microsoft\Teams\blob_storage", "$env:APPDATA\Microsoft\Teams\databases", "$env:APPDATA\Microsoft\Teams\IndexedDB", "$env:APPDATA\Microsoft\Teams\Local Storage", "$env:APPDATA\Microsoft\Teams\tmp") }
+            "Logs Antigos" = @{ Type = "File"; Path = @("$env:APPDATA\Microsoft\Teams\logs.txt") }
         }
-        "*Slack*" = @{
+        "Discord" = @{
+            Processes = @("Discord");
+            "Cache Geral" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\discord\Cache", "$env:APPDATA\discord\Code Cache", "$env:APPDATA\discord\GPUCache") }
+        }
+        "Slack" = @{
             Processes = @("slack");
             "Cache de Dados" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Slack\Cache", "$env:APPDATA\Slack\Code Cache", "$env:APPDATA\Slack\GPUCache") }
         }
-        "*Discord*" = @{
-             Processes = @("Discord");
-             "Cache de Dados" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\discord\Cache", "$env:APPDATA\discord\Code Cache", "$env:APPDATA\discord\GPUCache") }
-        }
-        "*Telegram*" = @{
-            Processes = @("Telegram");
-            "Cache de Midia e Dados" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Telegram Desktop\tdata") }
-        }
-        "*WhatsApp*" = @{
+        "WhatsApp" = @{
             Processes = @("WhatsApp");
-            "Cache de Midia e Dados" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\WhatsApp\Cache", "$env:APPDATA\WhatsApp\Code Cache", "$env:APPDATA\WhatsApp\GPUCache") }
+            "Cache de Midia/Dados" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\WhatsApp\Cache", "$env:APPDATA\WhatsApp\Code Cache", "$env:APPDATA\WhatsApp\GPUCache") }
+            "Service Worker" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\WhatsApp\Service Worker\CacheStorage") }
         }
-        # --- Acesso Remoto ---
-        "*TeamViewer*" = @{
-            Processes = @("TeamViewer");
-            "Logs e Cache de Conexao" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\TeamViewer") }
+        "Telegram" = @{
+            Processes = @("Telegram");
+            "Cache de Imagens/Temp" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Telegram Desktop\tdata\user_data\cache", "$env:APPDATA\Telegram Desktop\tdata\temp") }
         }
-        "*AnyDesk*" = @{
+        "Zoom" = @{
+            Processes = @("Zoom");
+            "Logs de Reuniao" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Zoom\logs") }
+            "Cache de Dados" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Zoom\data") }
+        }
+        "Skype" = @{
+            Processes = @("Skype");
+            "Cache de Navegador Interno" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Microsoft\Skype for Desktop\Cache", "$env:APPDATA\Microsoft\Skype for Desktop\Code Cache") }
+        }
+        "Cisco Webex" = @{
+            Processes = @("CiscoCollabHost");
+            "Cache e Logs" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\CiscoSpark") }
+        }
+
+        # ==========================================================
+        # PRODUTIVIDADE E ESCRITORIO
+        # ==========================================================
+        "Microsoft Office 365" = @{
+            Processes = @("winword", "excel", "powerpnt", "outlook");
+            "Office File Cache (FSD)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Office\16.0\OfficeFileCache") }
+            "Cache de Solucoes (Add-ins)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Office\SolutionPackages") }
+            "Logs de Telemetria" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Office\16.0\Telemetry") }
+            "Arquivos Temporarios do Word" = @{ Type = "File"; Path = @("$env:APPDATA\Microsoft\Word\*.tmp", "$env:APPDATA\Microsoft\Word\~*.*") }
+        }
+        "Adobe Acrobat Reader" = @{
+            Processes = @("AcroRd32", "Acrobat");
+            "Cache de Visualizacao (ACR)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Adobe\Acrobat\*\Cache") }
+            "Arquivos de Instalacao (Setup)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Adobe\Setup") }
+        }
+        "Adobe Creative Cloud" = @{
+            Processes = @("Adobe Desktop Service", "CCXProcess");
+            "Media Cache (Common)" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Adobe\Common\Media Cache Files", "$env:APPDATA\Adobe\Common\Media Cache") }
+            "Logs de Instalacao" = @{ Type = "File"; Path = @("$env:ProgramFiles(x86)\Common Files\Adobe\Installers\*.log.gz") }
+        }
+        "LibreOffice" = @{
+            Processes = @("soffice", "swriter", "scalc");
+            "Cache de Usuario" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\LibreOffice\4\user\cache") }
+            "Backups Temporarios" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\LibreOffice\4\user\backup") }
+        }
+        "Notepad++" = @{
+            Processes = @("notepad++");
+            "Backups Nao Salvos" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Notepad++\backup") }
+        }
+
+        # ==========================================================
+        # FERRAMENTAS DE TI, ACESSO REMOTO E DEV
+        # ==========================================================
+		"Remote Desktop (RDP)" = @{
+            Processes = @("mstsc");
+            # O wildcard *.bin pega o cache de bitmap que ocupa centenas de MB
+            "Cache de Bitmap (Imagens)" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Microsoft\Terminal Server Client\Cache\*.bin", "$env:LOCALAPPDATA\Microsoft\Terminal Server Client\Cache\*.bmc") }
+            "Cache de Banco de Dados" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Microsoft\Terminal Server Client\Cache\*.db") }
+        }
+        "AnyDesk" = @{
             Processes = @("AnyDesk");
-            "Logs e Cache de Conexao" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\AnyDesk\ad_cache", "$env:APPDATA\AnyDesk\ad_logs") }
+            "Logs de Conexao" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\AnyDesk\ad_logs", "$env:PROGRAMDATA\AnyDesk\ad_logs") }
+            "Trace Files" = @{ Type = "File"; Path = @("$env:APPDATA\AnyDesk\*.trace") }
         }
-        # --- Sistema e Desenvolvimento ---
-        "*Visual Studio Code*" = @{
+        "TeamViewer" = @{
+            Processes = @("TeamViewer");
+            "Logs de Sessao" = @{ Type = "File"; Path = @("$env:APPDATA\TeamViewer\Connections*.txt") }
+        }
+        "Visual Studio Code" = @{
             Processes = @("Code");
-            "Cache de Codigo" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Code\Cache", "$env:APPDATA\Code\CachedData", "$env:APPDATA\Code\GPUCache") }
+            "Cache de Codigo" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\Code\Cache", "$env:APPDATA\Code\CachedData", "$env:APPDATA\Code\GPUCache", "$env:APPDATA\Code\Service Worker\CacheStorage") }
         }
-        "*Spotify*" = @{
+        "Visual Studio (IDE)" = @{
+            Processes = @("devenv");
+            "Component Cache" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\VisualStudio\*\ComponentModelCache") }
+            "Arquivos Temporarios" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\VisualStudio\*\*.tmp") }
+        }
+        "WinRAR" = @{
+            Processes = @("WinRAR");
+            "Arquivos Temporarios (Drag-Drop)" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\WinRAR\Temp") }
+        }
+        "7-Zip" = @{
+            Processes = @("7zFM");
+            "Pastas Temporarias Esquecidas" = @{ Type = "FolderContent"; Path = @("$env:TEMP\7z*") }
+        }
+
+        # ==========================================================
+        # MULTIMIDIA E JOGOS
+        # ==========================================================
+        "Spotify" = @{
             Processes = @("Spotify");
-            "Cache de Midia" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Spotify\Data") }
+            "Cache de Midia (Storage)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Spotify\Data", "$env:LOCALAPPDATA\Spotify\Storage") }
+            "Browser Cache" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Spotify\Browser\Cache") }
         }
-        "Windows Defender" = @{
+        "VLC Media Player" = @{
+            Processes = @("vlc");
+            "Cache de Capas de Album (Art)" = @{ Type = "FolderContent"; Path = @("$env:APPDATA\vlc\art") }
+        }
+        "Steam" = @{
+            Processes = @("steam");
+            "Browser Cache (Loja)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Steam\htmlcache", "$env:ProgramFiles(x86)\Steam\appcache\httpcache") }
+        }
+        "NVIDIA" = @{
             Processes = @();
-            "Logs de Verificacao" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\Microsoft\Windows Defender\Scans\History\Service") }
+            "Cache de Instalador (Downloader)" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\NVIDIA Corporation\Downloader") }
+            "Cache de Shader (GLCache)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\NVIDIA\GLCache") }
+        }
+        "AMD" = @{
+            Processes = @();
+            "Cache de Shader (DX)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\AMD\DxCache") }
+        }
+
+        # ==========================================================
+        # ANTIVIRUS E SEGURANCA (LOGS)
+        # ==========================================================
+        "McAfee" = @{
+            Processes = @();
+            "Logs de Escaneamento" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\McAfee\DesktopProtection\Logs") }
+        }
+        "Symantec / Norton" = @{
+            Processes = @();
+            "Logs e Historico" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\Norton\{0C55C096-0F1D-4F28-AAA2-85EF591126E7}\SRTSP\Logs") } # GUID pode variar
+        }
+        "Java (Sun)" = @{
+            Processes = @("java", "javaw");
+            "Cache de Applets" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Sun\Java\Deployment\cache") }
         }
     }
-
+	
+	
     BloatwareApps = [ordered]@{
         "Microsoft.549981C3F5F10"                  = @{ FriendlyName = "Cortana (Assistente)";                  WingetId = "9N2L52R72P9D" }
         "Microsoft.WindowsStore"                  = @{ FriendlyName = "Microsoft Store (Loja)";                WingetId = "9WZDNCRFJBMP" }
@@ -198,6 +326,17 @@ public class Wallpaper {
 }
 "@
 Add-Type -TypeDefinition $csharpCode -ErrorAction SilentlyContinue
+
+$user32Source = @"
+using System;
+using System.Runtime.InteropServices;
+public class User32 {
+    [DllImport("user32.dll")]
+    public static extern bool SetProcessDPIAware();
+}
+"@
+Add-Type -TypeDefinition $user32Source -ErrorAction SilentlyContinue
+[User32]::SetProcessDPIAware() | Out-Null
 
 # --- Bloco de Verificacao de Administrador ---
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")) {
@@ -297,8 +436,24 @@ function Create-TitledControlPanel {
     $Control.BorderStyle = [System.Windows.Forms.BorderStyle]::None
     
     $buttonPanel = New-Object System.Windows.Forms.Panel; $buttonPanel.Height = 30; $buttonPanel.Dock = "Bottom"
-    $selectAllBtn = New-Object System.Windows.Forms.Button; $selectAllBtn.Text = "Marcar Todos"; $selectAllBtn.Dock = "Left"; $selectAllBtn.Width = 120
-    $deselectAllBtn = New-Object System.Windows.Forms.Button; $deselectAllBtn.Text = "Desmarcar Todos"; $deselectAllBtn.Dock = "Left"; $deselectAllBtn.Width = 120
+      
+    # Botão Marcar Todos
+    $selectAllBtn = New-Object System.Windows.Forms.Button
+    $selectAllBtn.Text = "Marcar Todos"
+    $selectAllBtn.Dock = "Left"
+    $selectAllBtn.AutoSize = $true
+    $selectAllBtn.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+    $selectAllBtn.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0) # Espaço interno para beleza
+
+    # Botão Desmarcar Todos
+    $deselectAllBtn = New-Object System.Windows.Forms.Button
+    $deselectAllBtn.Text = "Desmarcar Todos"
+    $deselectAllBtn.Dock = "Left"
+    $deselectAllBtn.AutoSize = $true
+    $deselectAllBtn.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+    $deselectAllBtn.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0) # Espaço interno para beleza
+    
+    # ------------------------------------
     
     $selectAllBtn.Add_Click({ 
         $targetControl = $this.Parent.Parent.Controls | Where-Object { $_ -isnot [System.Windows.Forms.Panel] }
@@ -309,13 +464,18 @@ function Create-TitledControlPanel {
         if ($targetControl) { Set-CheckedStateOnControl -Control $targetControl -State $false }
     })
     
+    # A ordem aqui importa para o Dock=Left. O primeiro adicionado fica na extrema esquerda.
     $buttonPanel.Controls.AddRange(@($deselectAllBtn, $selectAllBtn))
 
     if (-not [string]::IsNullOrWhiteSpace($ExtraButtonText) -and $ExtraButtonAction) {
         $extraBtn = New-Object System.Windows.Forms.Button
         $extraBtn.Text = $ExtraButtonText
         $extraBtn.Dock = "Right"
-        $extraBtn.Width = 200
+        # Aplicamos a mesma lógica para o botão extra, caso ele exista
+        $extraBtn.AutoSize = $true
+        $extraBtn.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+        $extraBtn.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+        
         $extraBtn.Add_Click($ExtraButtonAction)
         $buttonPanel.Controls.Add($extraBtn)
     }
@@ -336,8 +496,14 @@ function Create-ListViewManagementPanel {
     $listView = New-Object System.Windows.Forms.ListView; $listView.Dock = "Fill"; $listView.View = "Details"; $listView.CheckBoxes = $true
     
     $buttonPanel = New-Object System.Windows.Forms.Panel; $buttonPanel.Height = 30; $buttonPanel.Dock = "Bottom"
-    $analyzeButton = New-Object System.Windows.Forms.Button; $analyzeButton.Text = $AnalyzeButtonText; $analyzeButton.Dock = "Left"; $analyzeButton.Width = 120
-    $cleanButton = New-Object System.Windows.Forms.Button; $cleanButton.Text = $CleanButtonText; $cleanButton.Dock = "Right"; $cleanButton.Width = 150; $cleanButton.Enabled = $false
+    
+    # --- CORREÇÃO: AutoSize ---
+    $analyzeButton = New-Object System.Windows.Forms.Button; $analyzeButton.Text = $AnalyzeButtonText; $analyzeButton.Dock = "Left"
+    $analyzeButton.AutoSize = $true; $analyzeButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $analyzeButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+    
+    $cleanButton = New-Object System.Windows.Forms.Button; $cleanButton.Text = $CleanButtonText; $cleanButton.Dock = "Right"; $cleanButton.Enabled = $false
+    $cleanButton.AutoSize = $true; $cleanButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $cleanButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+    # --------------------------
     
     $buttonPanel.Controls.AddRange(@($analyzeButton, $cleanButton))
     $group.Controls.AddRange(@($listView, $buttonPanel))
@@ -362,8 +528,13 @@ function Create-TreeViewAnalysisPanel {
     $summaryLabel = New-Object System.Windows.Forms.Label; $summaryLabel.Dock = "Bottom"; $summaryLabel.Text = "Total a ser limpo: 0 B"; $summaryLabel.TextAlign = "MiddleRight"
     
     $buttonPanel = New-Object System.Windows.Forms.Panel; $buttonPanel.Height = 30; $buttonPanel.Dock = "Bottom"
-    $analyzeButton = New-Object System.Windows.Forms.Button; $analyzeButton.Text = $AnalyzeButtonText; $analyzeButton.Dock = "Left"; $analyzeButton.Width = 120
-    $cleanButton = New-Object System.Windows.Forms.Button; $cleanButton.Text = $CleanButtonText; $cleanButton.Dock = "Right"; $cleanButton.Width = 150; $cleanButton.Enabled = $false
+    
+    $analyzeButton = New-Object System.Windows.Forms.Button; $analyzeButton.Text = $AnalyzeButtonText; $analyzeButton.Dock = "Left"
+    $analyzeButton.AutoSize = $true; $analyzeButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $analyzeButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+    
+    $cleanButton = New-Object System.Windows.Forms.Button; $cleanButton.Text = $CleanButtonText; $cleanButton.Dock = "Right"; $cleanButton.Enabled = $false
+    $cleanButton.AutoSize = $true; $cleanButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $cleanButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+    # --------------------------
     
     $buttonPanel.Controls.AddRange(@($analyzeButton, $cleanButton))
     $group.Controls.AddRange(@($treeView, $summaryLabel, $buttonPanel))
@@ -474,10 +645,11 @@ function Update-Status($message) {
     $logLine = "[$(Get-Date -Format 'HH:mm:ss')] $message"
     if ($form.IsHandleCreated) {
         $form.Invoke([Action]{
-            if ($statusBox.Lines.Count > 500) {
+            if ($statusBox.Lines.Count -gt 500) {
                 $statusBox.Select(0, $statusBox.GetFirstCharIndexFromLine(1))
                 $statusBox.SelectedText = ""
             }
+            # --------------------------------------------
             $statusBox.AppendText("$logLine`r`n")
             $statusBox.ScrollToCaret()
         })
@@ -549,11 +721,91 @@ function Stop-Process-AndWait {
     }
 }
 
+# ==============================================================================
+# [NOVO] FUNCOES DE CONTROLE DE PROCESSOS (KILL SWITCH)
+# ==============================================================================
+
+function Encerra-AplicativosBloqueadores {
+    param([array]$NodesParaLimpar)
+
+    # 1. Mapeamento Inteligente: Nome na Arvore (UI) -> Nome do Processo (Sistema)
+    $MapaProcessos = @{
+        "Google Chrome"    = "chrome"
+        "Microsoft Edge"   = "msedge"
+        "Opera"            = "opera"
+        "Mozilla Firefox"  = "firefox"
+        "Brave"            = "brave"
+        "Internet Explorer"= "iexplore"
+        "Teams"            = "Teams", "msteams", "ms-teams"
+        "Discord"          = "Discord"
+        "Spotify"          = "Spotify"
+        "Steam"            = "steam"
+        "OneDrive"         = "OneDrive"
+        "WhatsApp"         = "WhatsApp"
+    }
+
+    $processosParaMatar = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    # 2. Varre o que o usuario marcou para limpar e descobre quais apps estao envolvidos
+    foreach ($node in $NodesParaLimpar) {
+        # Verifica pelo Nome do Grupo (Pai) ou Texto do Item
+        $textoItem = if ($node.Parent) { $node.Parent.Text } else { $node.Text }
+        
+        foreach ($chave in $MapaProcessos.Keys) {
+            if ($textoItem -like "*$chave*") {
+                $procs = $MapaProcessos[$chave]
+                if ($procs -is [string]) { $processosParaMatar.Add($procs) | Out-Null }
+                else { $procs | ForEach-Object { $processosParaMatar.Add($_) | Out-Null } }
+            }
+        }
+        
+        # Verifica se o proprio node tem processos definidos no codigo (Tag.Processes)
+        if ($node.Tag -is [System.Collections.IDictionary] -and $node.Tag.ContainsKey('Processes')) {
+             $node.Tag['Processes'] | ForEach-Object { $processosParaMatar.Add($_) | Out-Null }
+        }
+    }
+
+    if ($processosParaMatar.Count -eq 0) { return }
+
+    # 3. Executa o Kill Switch
+    $listaNomes = [string]::Join(", ", $processosParaMatar)
+    if (Confirm-Action "Para uma limpeza profunda (estilo CCleaner), os seguintes apps precisam ser fechados:`n`n$listaNomes`n`nDeseja fecha-los automaticamente agora?" "Modo de Limpeza Profunda") {
+        Update-Status "Encerrando aplicativos para liberar arquivos..."
+        foreach ($proc in $processosParaMatar) {
+            Stop-Process-AndWait -processName $proc -timeoutSeconds 5
+        }
+        # Pausa vital para o Kernel do Windows liberar o handle do arquivo
+        Start-Sleep -Seconds 2
+    } else {
+        Update-Status "AVISO: Voce optou por manter apps abertos. A limpeza pode falhar em alguns arquivos."
+    }
+}
+
+function Gerenciar-Explorer {
+    param(
+        [string]$Acao # "Fechar" ou "Restaurar"
+    )
+    if ($Acao -eq "Fechar") {
+        Update-Status "Encerrando Windows Explorer para limpar caches de sistema..."
+        Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
+    }
+    elseif ($Acao -eq "Restaurar") {
+        if (-not (Get-Process -Name "explorer" -ErrorAction SilentlyContinue)) {
+            Update-Status "Reiniciando Windows Explorer..."
+            Start-Process "explorer.exe"
+            Start-Sleep -Seconds 2 # Espera a interface voltar
+        }
+    }
+}
+
 function Test-NetConnectionSafe($hostname = "8.8.8.8") {
     if (-not (Test-Connection -ComputerName $hostname -Count 1 -Quiet)) {
         throw "Sem conexao com a internet ou o host '$hostname' nao esta alcancavel."
     }
 }
+
+
 
 function Download-File-Robust {
     param(
@@ -839,23 +1091,71 @@ function Ensure-WingetIsInstalled {
     return $false
 }
 function Set-TargetReleaseVersion {
+    # --- ETAPA 1: Definir Politicas de Registro (GPedit) ---
     $targetVersion = $script:config.TargetReleaseVersion
     if ([string]::IsNullOrWhiteSpace($targetVersion)) {
         throw "A versao de destino (TargetReleaseVersion) nao esta definida no bloco de configuracao do script."
     }
+    
     $regPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
-    Update-Status "... Definindo a versao de destino do Windows para '$targetVersion'."
+    Update-Status "... Definindo a versao de destino do Windows para '$targetVersion' (Registro)."
+    
     try {
         if (-not (Test-Path $regPath)) {
             Update-Status "... Criando chave de registro para politicas do Windows Update."
             New-Item -Path $regPath -Force | Out-Null
         }
-        Update-Status "... Habilitando a politica (TargetReleaseVersion = 1)."
+        # Habilita a política de "Target Release Version"
         Set-ItemProperty -Path $regPath -Name "TargetReleaseVersion" -Value 1 -Type DWord -Force
-        Update-Status "... Definindo a versao alvo para '$targetVersion' (TargetReleaseVersionInfo)."
+        # Define qual é a versão (ex: 25H2)
         Set-ItemProperty -Path $regPath -Name "TargetReleaseVersionInfo" -Value $targetVersion -Type String -Force
+        # Opcional: Define o Produto como Windows 11 para garantir
+        Set-ItemProperty -Path $regPath -Name "ProductVersion" -Value "Windows 11" -Type String -Force 
     } catch {
         throw "ERRO ao definir a politica de versao de destino. Detalhes: $($_.Exception.Message)"
+    }
+
+    # --- ETAPA 2: Instalar Pacote de Habilitação (KB5054156) ---
+    # Link fornecido manualmente para o Enablement Package
+    $kbUrl = "https://catalog.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/fa84cc49-18b2-4c26-b389-90c96e6ae0d2/public/windows11.0-kb5054156-x64_a0c1638cbcf4cf33dbe9a5bef69db374b4786974.msu"
+    $kbFileName = "windows11.0-kb5054156-x64.msu"
+    $kbPath = Join-Path $env:TEMP $kbFileName
+
+    try {
+        Update-Status "--> Iniciando instalação do KB5054156 (Pacote de Habilitação 25H2)..."
+        
+        Update-Status "... Baixando KB5054156..."
+        Download-File-Robust -Url $kbUrl -OutFile $kbPath
+
+        Update-Status "... Instalando KB5054156 via WUSA (Isso pode levar alguns minutos)..."
+        
+        # Executa o instalador autônomo do Windows Update (wusa.exe)
+        # /quiet = sem interface | /norestart = não reinicia sozinho
+        $process = Start-Process -FilePath "wusa.exe" -ArgumentList "`"$kbPath`" /quiet /norestart" -Wait -PassThru
+
+        # Verificacao dos codigos de saida do WUSA
+        switch ($process.ExitCode) {
+            0 { 
+                Update-Status "--> SUCESSO: KB5054156 instalado." 
+                $script:rebootRequired = $true
+            }
+            3010 { 
+                Update-Status "--> SUCESSO: KB5054156 instalado (Reinicialização pendente)." 
+                $script:rebootRequired = $true
+            }
+            2359302 { 
+                Update-Status "AVISO: O KB5054156 já está instalado neste computador." 
+            }
+            default { 
+                Update-Status "AVISO: A instalação do KB retornou o código $($process.ExitCode). Verifique se o sistema é compatível." 
+            }
+        }
+
+    } catch {
+        Update-Status "ERRO ao tentar instalar o KB5054156. O script continuará apenas com o ajuste de registro. Erro: $($_.Exception.Message)"
+    } finally {
+        # Limpeza do arquivo temporário
+        if (Test-Path $kbPath) { Remove-Item -Path $kbPath -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -1149,42 +1449,41 @@ function Install-Softphone {
     Update-Status "--> Baixando instalador do Softphone..."
     Download-File-Robust -Url $softphone.InstallerUrl -OutFile $installerPath
     
-    if ($softphone.InstallerHash -and $softphone.InstallerHash -ne "COLOQUE_O_HASH_SHA256_DO_INSTALADOR_AQUI") {
-        Update-Status "--> Verificando integridade do instalador..."
-        $fileHash = (Get-FileHash $installerPath -Algorithm SHA256).Hash.ToUpper()
-        if ($fileHash -ne $softphone.InstallerHash.ToUpper()) {
-            throw "Falha na verificacao de checksum do instalador do Softphone! O arquivo pode estar corrompido."
-        }
-        Update-Status "--> Verificacao de integridade OK."
-    }
+    # [REMOVIDO] Bloco de Validação de Hash
     
     Update-Status "--> Iniciando instalacao silenciosa do Softphone..."
     
-    # 1. O comando "-Wait" e "-PassThru" foram removidos.
-    # O "-Wait" estava fazendo o script travar porque o instalador do softphone
-    # provavelmente não encerra seu processo principal após a conclusão.
-    Start-Process $installerPath -ArgumentList "/S"
+    # Inicia o processo e captura o objeto do processo (-PassThru)
+    $process = Start-Process -FilePath $installerPath -ArgumentList "/S" -PassThru
+    
+    if ($process) {
+        Update-Status "--> Processo de instalação iniciado (PID: $($process.Id)). Aguardando conclusão..."
+        
+        # Aguarda até 2 minutos (120.000 ms) pelo término. 
+        $exited = $process.WaitForExit(120000) 
+        
+        if ($exited) {
+            Update-Status "--> Instalação finalizada com sucesso."
+        } else {
+            Update-Status "AVISO: O instalador excedeu o tempo limite de espera (possivelmente abriu o app). Continuando fluxo..."
+        }
+    } else {
+        # Fallback caso o processo execute rápido demais para ser capturado
+        Start-Sleep -Seconds 10
+    }
 
-    # 2. Adicionamos uma pausa manual (sleep).
-    # Como não estamos mais esperando o processo terminar, precisamos dar um tempo
-    # fixo para que a instalação tenha a chance de ser concluída em segundo plano.
-    # 20 segundos é geralmente um tempo seguro para a maioria das instalações leves.
-    Update-Status "--> Aguardando 20 segundos para a conclusao da instalacao em segundo plano..."
-    Start-Sleep -Seconds 20
-    
-    # 3. A verificação do ExitCode foi removida, pois sem o "-Wait", não é possível capturá-lo.
-    # Esta é uma troca necessária para evitar que o script inteiro trave.
-    Update-Status "--> Processo de instalacao enviado. Assumindo sucesso e continuando."
-    
     if ($softphone.Executable) {
-        Update-Status "--> Procurando o executavel para iniciar o aplicativo..."
-        Start-Sleep -Seconds 3
+        Update-Status "--> Verificando instalação..."
+        Start-Sleep -Seconds 2
         $exePath = Find-ExecutablePath -ExecutableName $softphone.Executable
         if ($exePath) {
             $firstPath = $exePath | Select-Object -First 1
-            Update-Status "--> Iniciando Softphone em: $firstPath"
-            # Este Start-Process já funciona corretamente, pois não espera o softphone fechar.
-            Start-Process -FilePath $firstPath
+            Update-Status "--> Softphone detectado em: $firstPath"
+            
+            # Opcional: Inicia o app se ele ainda não estiver rodando
+            if (-not (Get-Process -Name ($softphone.Executable -replace ".exe","") -ErrorAction SilentlyContinue)) {
+                 Start-Process -FilePath $firstPath
+            }
         } else {
             Update-Status "AVISO: Executavel do Softphone não encontrado após a instalação."
         }
@@ -1256,21 +1555,72 @@ function Install-TrendMicroAgent {
 }
 function Get-InstalledApps { $apps = @{}; $paths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"); foreach ($p in $paths) { Get-ChildItem -Path $p -EA SilentlyContinue | % { $name = $_.GetValue("DisplayName"); if ($name -and -not $apps.ContainsKey($name) -and $_.GetValue("SystemComponent") -ne 1) { $apps[$name] = $_ } } }; return $apps.Keys | Sort-Object }
 
-function Get-DirectorySize-Formatted { param($InputObject); $totalSize = 0; if ($InputObject -is [string] -or $InputObject -is [System.Management.Automation.PathInfo]) { try { $Path = [string]$InputObject; if (-not (Test-Path -LiteralPath $Path)) { return @{ Bytes = 0; Formatted = "0 B" } }; $item = Get-Item -LiteralPath $Path -EA Stop; if ($item.PSIsContainer) { $stack = [System.Collections.Stack]::new(); $stack.Push($item.FullName); while ($stack.Count -gt 0) { $currentPath = $stack.Pop(); try { $files = [System.IO.Directory]::GetFiles($currentPath); $dirs = [System.IO.Directory]::GetDirectories($currentPath); foreach ($file in $files) { try { $fileInfo = New-Object System.IO.FileInfo($file); $totalSize += $fileInfo.Length } catch {} }; foreach ($dir in $dirs) { $stack.Push($dir) } } catch {} } } else { $totalSize = $item.Length } } catch { $totalSize = 0 } } else { $totalSize = $InputObject }; $sizeInBytes = [long]$totalSize; if ($sizeInBytes -ge 1GB) { return @{ Bytes = $sizeInBytes; Formatted = "{0:N2} GB" -f ($sizeInBytes / 1GB) } } elseif ($sizeInBytes -ge 1MB) { return @{ Bytes = $sizeInBytes; Formatted = "{0:N2} MB" -f ($sizeInBytes / 1MB) } } elseif ($sizeInBytes -ge 1KB) { return @{ Bytes = $sizeInBytes; Formatted = "{0:N2} KB" -f ($sizeInBytes / 1KB) } } else { return @{ Bytes = $sizeInBytes; Formatted = "$sizeInBytes B" } } }
+function Get-DirectorySize-Formatted {
+    param($InputObject)
+    $totalSize = 0
+    
+    # Função interna robusta para recursão segura
+    function Get-Size-Recursive($targetPath) {
+        $sizeSum = 0
+        try {
+            $dirInfo = New-Object System.IO.DirectoryInfo($targetPath)
+            # EnumerateFiles é melhor que GetFiles pois não carrega tudo na RAM
+            foreach ($file in $dirInfo.EnumerateFiles("*", [System.IO.SearchOption]::TopDirectoryOnly)) {
+                try { $sizeSum += $file.Length } catch {}
+            }
+            foreach ($dir in $dirInfo.EnumerateDirectories("*", [System.IO.SearchOption]::TopDirectoryOnly)) {
+                try { $sizeSum += Get-Size-Recursive -targetPath $dir.FullName } catch {}
+            }
+        } catch {
+            # Se a pasta raiz estiver bloqueada, retorna 0 sem quebrar o script
+            return 0
+        }
+        return $sizeSum
+    }
 
+    if ($InputObject -is [string] -or $InputObject -is [System.Management.Automation.PathInfo]) {
+        $Path = [string]$InputObject
+        
+        # Suporte a wildcards no caminho raiz (ex: User Data\*\Cache)
+        $resolvedPaths = $null
+        try {
+            $resolvedPaths = Resolve-Path $Path -ErrorAction SilentlyContinue
+        } catch {}
+
+        if ($resolvedPaths) {
+            foreach ($rPath in $resolvedPaths) {
+                if (Test-Path -LiteralPath $rPath.Path -PathType Container) {
+                    $totalSize += Get-Size-Recursive -targetPath $rPath.Path
+                } 
+		elseif (Test-Path -LiteralPath $rPath.Path -PathType Leaf) {
+                # CORREÇÃO: Adicionado '-ErrorAction Stop' para forçar o erro a cair no catch
+                try { 
+                    $totalSize += (Get-Item -LiteralPath $rPath.Path -ErrorAction Stop).Length 
+                } catch {
+                    # Arquivo sumiu ou está bloqueado? Ignora e segue a vida.
+                }
+            }
+        }
+    } 
+	}
+    else { $totalSize = $InputObject }
+
+    $sizeInBytes = [long]$totalSize
+    if ($sizeInBytes -ge 1GB) { return @{ Bytes = $sizeInBytes; Formatted = "{0:N2} GB" -f ($sizeInBytes / 1GB) } }
+    elseif ($sizeInBytes -ge 1MB) { return @{ Bytes = $sizeInBytes; Formatted = "{0:N2} MB" -f ($sizeInBytes / 1MB) } }
+    elseif ($sizeInBytes -ge 1KB) { return @{ Bytes = $sizeInBytes; Formatted = "{0:N2} KB" -f ($sizeInBytes / 1KB) } }
+    else { return @{ Bytes = $sizeInBytes; Formatted = "$sizeInBytes B" } }
+}
 function Clean-SelectedFiles {
     $filesPanel.AnalyzeButton.Enabled = $false
     $filesPanel.CleanButton.Enabled = $false
     $treeView = $filesPanel.Control
 
+    # Helper interno para pegar apenas os nós marcados
     function Get-CheckedChildNodes($nodeCollection) {
         foreach ($node in $nodeCollection) {
-            if ($node.Nodes.Count -gt 0) {
-                Get-CheckedChildNodes($node.Nodes)
-            }
-            elseif ($node.Checked) {
-                $node
-            }
+            if ($node.Nodes.Count -gt 0) { Get-CheckedChildNodes($node.Nodes) }
+            elseif ($node.Checked) { $node }
         }
     }
     $nodesToClean = @(Get-CheckedChildNodes($treeView.Nodes))
@@ -1280,126 +1630,160 @@ function Clean-SelectedFiles {
         $filesPanel.AnalyzeButton.Enabled = $true
         return 
     }
+
     if (-not (Confirm-Action "Os dados de $($nodesToClean.Count) itens serao apagados permanentemente. Deseja continuar?")) { 
         Update-Status "Limpeza cancelada."
         $filesPanel.AnalyzeButton.Enabled = $true
         $filesPanel.CleanButton.Enabled = $true
         return 
     }
-    
-    $processesToClose = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $nodesToClean | ForEach-Object {
-        if ($_.Parent -and $_.Parent.Tag -is [array]) {
-            $_.Parent.Tag | ForEach-Object { $processesToClose.Add($_) | Out-Null }
-        }
-    }
 
-    if ($processesToClose.Count -gt 0) {
-        $processList = [string]::Join(", ", $processesToClose)
-        $message = "Os seguintes aplicativos estao em execucao e precisam ser fechados para a limpeza:`n`n$processList`n`nDeseja fecha-los agora para continuar?"
-        if (Confirm-Action $message "Aplicativos Abertos Detectados") {
-            $processesToClose | ForEach-Object { Stop-Process-AndWait -processName $_ }
-        } else {
-            Update-Status "Limpeza cancelada pelo usuario devido a aplicativos abertos."
-            $filesPanel.AnalyzeButton.Enabled = $true; $filesPanel.CleanButton.Enabled = $true; return
-        }
+    # 1. Encerra navegadores e apps comuns
+    Encerra-AplicativosBloqueadores -NodesParaLimpar $nodesToClean
+    
+    # 2. Verifica se precisamos matar o Explorer (Para cache de miniaturas ou IconCache)
+    $reiniciarExplorer = $false
+    $itensExplorer = $nodesToClean | Where-Object { $_.Text -like "*Miniaturas*" -or $_.Text -like "*IconCache*" -or $_.Text -like "*Explorer*" }
+    
+    if ($itensExplorer) {
+        Gerenciar-Explorer -Acao "Fechar"
+        $reiniciarExplorer = $true
     }
     
     Run-Task "Limpeza de Arquivos Selecionados" {
         foreach ($node in $nodesToClean) {
             $details = $node.Tag
+            # Protecao contra nodes sem tag (apenas pais)
+            if ($null -eq $details) { continue }
+
             $parentName = if ($node.Parent) { $node.Parent.Text } else { "Sistema" }
             $itemName = $node.Text.Split('(')[0].Trim()
-            Update-Status "Limpando: $parentName - $itemName"
+            
+            # Pula o log excessivo para itens muito rapidos
+            if ($itemName -notlike "*Cookies*") { Update-Status "Limpando: $parentName - $itemName" }
             
             try {
-                if ($details.PreAction) { Update-Status "... Executando pre-acao."; & $details.PreAction }
+                # Pre-Action (Especifica do item)
+                if ($details.PreAction) { & $details.PreAction }
 
                 switch ($details.Type) {
                     "File" {
-                        $details.Path | ForEach-Object {
-                            $expandedPath = $ExecutionContext.InvokeCommand.ExpandString($_)
-                            if (Test-Path $expandedPath) {
-                                Remove-Item -Path $expandedPath -Force -ErrorAction SilentlyContinue
+                        $pathsToClean = if ($details.VerifiedPaths) { $details.VerifiedPaths } else { $details.Path }
+                        if ($pathsToClean) {
+                            $pathsToClean | ForEach-Object {
+                                $expandedPath = $ExecutionContext.InvokeCommand.ExpandString($_)
+                                # Adicionado -Force e tratamento de erro especifico
+                                Remove-Item -Path $expandedPath -Force -Recurse -ErrorAction SilentlyContinue
                             }
                         }
                     }
                     "FolderContent" {
-                         $details.Path | ForEach-Object {
-                            $expandedPath = $ExecutionContext.InvokeCommand.ExpandString($_)
-                            if (Test-Path $expandedPath -PathType Container) {
-                                Get-ChildItem -Path $expandedPath -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-                            }
+                         $pathsToClean = if ($details.VerifiedPaths) { $details.VerifiedPaths } else { $details.Path }
+                         if ($pathsToClean) {
+                             $pathsToClean | ForEach-Object {
+                                $expandedPath = $ExecutionContext.InvokeCommand.ExpandString($_)
+                                if (Test-Path $expandedPath -PathType Container) {
+                                    # Limpa conteudo, mantem pasta raiz
+                                    Get-ChildItem -Path $expandedPath -Force -Recurse -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+                                }
+                             }
                          }
                     }
                     "Action" {
-                        & $details.Action
+                        if ($details.Action) { & $details.Action }
                     }
                 }
             } catch {
-                Update-Status "AVISO: Falha ao limpar '$itemName'. Erro: $($_.Exception.Message)"
+                Update-Status "AVISO: Falha ao limpar '$itemName'. Pode estar em uso pelo sistema."
             } finally {
-                 if ($details.PostAction) { Update-Status "... Executando pós-acao."; & $details.PostAction }
+                 if ($details.PostAction) { & $details.PostAction }
             }
         }
-        Update-Status "Limpeza de arquivos concluida. Re-analisando para confirmar..."
-        Analyze-CleanableFiles
     }
+
+    # 3. Restaura o Explorer se ele foi fechado
+    if ($reiniciarExplorer) {
+        Gerenciar-Explorer -Acao "Restaurar"
+    }
+
+    Update-Status "Limpeza concluida. Atualizando lista..."
+    Analyze-CleanableFiles
 }
+
 function Analyze-CleanableFiles {
     $filesPanel.AnalyzeButton.Enabled = $false
     $filesPanel.CleanButton.Enabled = $false
     $filesPanel.Control.Nodes.Clear()
 
-    Run-Task "analise de Arquivos para Limpeza" {
+    Run-Task "Analise Profunda de Arquivos" {
         
         $filesPanel.Control.BeginUpdate()
         $foundItems = [System.Collections.Generic.List[object]]::new()
         
         try {
-            # ETAPA 1: Coleta de itens de limpeza do Sistema (Versao Completa)
+            # --- ETAPA 1: Itens do Sistema (Otimizado) ---
             $systemCleanOptions = [ordered]@{
                 "Esvaziar Lixeira" = @{ Type = "Action"; Action = [scriptblock]{ Clear-RecycleBin -Force -ErrorAction SilentlyContinue }; GetSize = [scriptblock]{ try { return ((New-Object -ComObject Shell.Application).NameSpace(0x0a).Items() | Measure-Object -Property Size -Sum -ErrorAction Stop).Sum } catch { return 0 } } }
-                "Arquivos Temporarios" = @{ Type = "FolderContent"; Path = @("$env:TEMP", "$env:windir\Temp") }
-                "Cache do Chocolatey (Pacotes Baixados)" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\chocolatey\temp", "$env:ProgramData\chocolatey\downloads") }
-				"Area de Transferencia" = @{ Type = "Action"; Action = [scriptblock]{ Set-Clipboard -Value $null }; GetSize = { return 0 } }
-                "Despejos de Memoria" = @{ Type = "File"; Path = @("$env:windir\Minidump\*.*", "$env:windir\MEMORY.DMP") }
-                "Fragmentos do verificador de disco" = @{ Type = "File"; Path = @("$($env:SystemDrive)\*.chk") }
-                "Relatorios do Windows" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\Microsoft\Windows\WER\ReportArchive", "$env:ProgramData\Microsoft\Windows\WER\ReportQueue", "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportArchive", "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportQueue") }
-                "Registros de rastreamento de eventos do Windows" = @{ Type = "File"; Path = @("$env:windir\Logs\*.etl") }
+                
+                "Arquivos Temporarios do Sistema" = @{ Type = "FolderContent"; Path = @("$env:TEMP", "$env:windir\Temp") }
+                
+                "OneDrive (Arquivos de cache)" = @{ 
+                    Type = "FolderContent"; 
+                    Path = @("$env:LOCALAPPDATA\Microsoft\OneDrive\cache\qmlcache", "$env:LOCALAPPDATA\Microsoft\OneDrive\logs");
+                    Processes = @("OneDrive") 
+                }
+                
+                "Windows Update (Downloads Antigos)" = @{ Type = "FolderContent"; Path = @("$env:windir\SoftwareDistribution\Download"); PreAction = { Stop-Service wuauserv -Force -EA SilentlyContinue }; PostAction = { Start-Service wuauserv -EA SilentlyContinue } }
+                
+                "Relatorios de Erro (WER)" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\Microsoft\Windows\WER\ReportArchive", "$env:ProgramData\Microsoft\Windows\WER\ReportQueue", "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportArchive", "$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportQueue") }
+                
+                "Despejos de Memoria (Memory Dumps)" = @{ Type = "File"; Path = @("$env:windir\Minidump\*", "$env:windir\MEMORY.DMP") }
+                
+                "Cache do DirectX Shader" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\D3DSCache") }
+                
+                "Cache de Fontes do Windows" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\Microsoft\Windows\Fonts\*.dat"); PreAction = { Stop-Service FontCache -Force -EA SilentlyContinue }; PostAction = { Start-Service FontCache -EA SilentlyContinue } }
+                
+                "Cache de Miniaturas (IconCache)" = @{ Type = "File"; Path = @("$env:LOCALAPPDATA\IconCache.db"); PreAction = { Stop-Process -Name explorer -Force -EA SilentlyContinue }; PostAction = { Start-Process explorer } }
+                
                 "Cache DNS" = @{ Type = "Action"; Action = [scriptblock]{ ipconfig /flushdns }; GetSize = { return 0 } }
-                "Arquivos de otimizacao de entrega do Windows" = @{ Type = "FolderContent"; Path = @("$env:windir\SoftwareDistribution\DeliveryOptimization"); PreAction = { Stop-Service DoSvc -Force -EA SilentlyContinue }; PostAction = { Start-Service DoSvc -EA SilentlyContinue } }
-                "Cache web do Windows" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Windows\INetCache") }
-			"Registros de eventos do Windows" = @{ 
-				Type = "Action"; 
-				Action = [scriptblock]{ (wevtutil el) | ForEach-Object { wevtutil cl $_ 2>$null } }; 
-				# CORRECAO: Agora calculamos o tamanho real dos arquivos de log.
-				GetSize = { 
-					try {
-						return (Get-ChildItem -Path "$env:windir\System32\winevt\Logs" -Filter "*.evtx" -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum
-					} catch {
-						return 0
-					}
-				} 
-				}
-				"Dados do Prefetch antigos" = @{ Type = "FolderContent"; Path = @("$env:windir\Prefetch") }
-                "OneDrive (Arquivos de cache)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\OneDrive\cache", "$env:LOCALAPPDATA\Microsoft\OneDrive\logs") }
-                "Itens do Office 365 (Itens de cache e update que nao precisam mais)" = @{ Type = "FolderContent"; Path = @("$env:LOCALAPPDATA\Microsoft\Office\16.0\OfficeFileCache", "$env:LOCALAPPDATA\Microsoft\Office\OTele") }
+                
+                "Cache de Otimizacao de Entrega" = @{ Type = "FolderContent"; Path = @("$env:windir\SoftwareDistribution\DeliveryOptimization"); PreAction = { Stop-Service DoSvc -Force -EA SilentlyContinue }; PostAction = { Start-Service DoSvc -EA SilentlyContinue } }
+                
+                # --- OTIMIZACAO AQUI: Uso de .NET puro em vez de wevtutil.exe ---
+                "Registros de Eventos (Logs)" = @{ 
+                    Type = "Action"; 
+                    Action = [scriptblock]{ 
+                        try {
+                            $session = [System.Diagnostics.Eventing.Reader.EventLogSession]::GlobalSession
+                            $session.GetLogNames() | ForEach-Object {
+                                try { $session.ClearLog($_) } catch {}
+                            }
+                        } catch {}
+                    }; 
+                    GetSize = { try { return (Get-ChildItem -Path "$env:windir\System32\winevt\Logs" -Filter "*.evtx" -Recurse -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum).Sum } catch { return 0 } } 
+                }
+                # ----------------------------------------------------------------
+                
+                "Dados do Prefetch" = @{ Type = "FolderContent"; Path = @("$env:windir\Prefetch") }
+                
+                "Cache do Chocolatey" = @{ Type = "FolderContent"; Path = @("$env:ProgramData\chocolatey\temp", "$env:ProgramData\chocolatey\downloads") }
             }
 
             # --- LOGICA DE PROGRESSO ---
-            $installedForAnalysis = Get-InstalledApps; $installedForAnalysis += "Windows Defender"
-            $totalSystemChecks = $systemCleanOptions.Count
-            $totalAppChecks = $installedForAnalysis.Count
-            $totalChecks = $totalSystemChecks + $totalAppChecks
+            $db = $script:config.CacheDatabase
+            $totalChecks = $systemCleanOptions.Count + $db.Count
             $checksDone = 0
 
+            # Análise de Sistema
             foreach ($option in $systemCleanOptions.GetEnumerator()) {
                 $checksDone++
                 $percent = [int](($checksDone / $totalChecks) * 100)
                 Update-Status "[$percent%] Analisando (Sistema): $($option.Name)..."
 
                 $optionName = $option.Name; $optionDetails = $option.Value; $totalSize = 0
+                
+                $sysProcesses = if ($optionDetails.ContainsKey("Processes")) { $optionDetails.Processes } else { $null }
+
                 if ($optionDetails.ContainsKey("GetSize")) { $totalSize = try { & $optionDetails.GetSize } catch { 0 } }
                 elseif ($optionDetails.Path) {
                     foreach ($pathPattern in $optionDetails.Path) {
@@ -1414,51 +1798,68 @@ function Analyze-CleanableFiles {
                 }
                 if ($totalSize -gt 0 -or $optionDetails.Type -eq "Action") {
                     $optionDetails.Size = $totalSize
-                    $foundItems.Add([pscustomobject]@{ Group = "Sistema"; ItemName = $optionName; Details = $optionDetails })
+                    $foundItems.Add([pscustomobject]@{ Group = "Sistema e Windows"; ItemName = $optionName; Details = $optionDetails; Processes = $sysProcesses })
                 }
             }
 
-            # ETAPA 2: Coleta de itens de Aplicativos
-            $db = $script:config.CacheDatabase
-            foreach ($app in $installedForAnalysis) {
+            # --- ETAPA 2: Análise de Apps ---
+            foreach ($appEntry in $db.GetEnumerator()) {
+                $appName = $appEntry.Name
+                $appData = $appEntry.Value
                 $checksDone++
                 $percent = [int](($checksDone / $totalChecks) * 100)
-                Update-Status "[$percent%] Analisando (Apps): $($app)..."
+                Update-Status "[$percent%] Verificando vestigios: $appName..."
 
-                foreach ($dbEntry in $db.GetEnumerator()) {
-                    if ($app -like $dbEntry.Name) {
-                        $appProcesses = if ($dbEntry.Value.ContainsKey("Processes")) { $dbEntry.Value.Processes } else { @() }
-                        foreach ($cacheType in $dbEntry.Value.GetEnumerator()) {
-                            if ($cacheType.Name -eq "Processes") { continue }
-                            $details = $cacheType.Value; $totalCacheSize = 0
-                            $pathsToVerify = $details.Path | ForEach-Object { try { $ExecutionContext.InvokeCommand.ExpandString($_) | Resolve-Path -ErrorAction SilentlyContinue } catch { $null } } | Where-Object { $_ -and (Test-Path -LiteralPath $_) }
-                            if ($pathsToVerify.Count -gt 0) { 
-                                $pathsToVerify | ForEach-Object { 
-                                    $pathSize = Get-DirectorySize-Formatted $_
-                                    if ($pathSize.Bytes -gt 0) { $totalCacheSize += $pathSize.Bytes }
-                                } 
-                            }
-                            if ($totalCacheSize -gt 0) {
-                                $details.Size = $totalCacheSize
-                                $foundItems.Add([pscustomobject]@{ Group = $app; ItemName = $cacheType.Name; Details = $details; Processes = $appProcesses })
-                            }
+                $appProcesses = if ($appData.ContainsKey("Processes")) { $appData.Processes } else { @() }
+                
+                foreach ($cacheType in $appData.GetEnumerator()) {
+                    if ($cacheType.Name -eq "Processes") { continue }
+                    $details = $cacheType.Value; $totalCacheSize = 0
+                    
+                    $validPaths = [System.Collections.Generic.List[string]]::new()
+                    if ($details.Path) {
+                        foreach ($rawPath in $details.Path) {
+                            try {
+                                $expandedPath = $ExecutionContext.InvokeCommand.ExpandString($rawPath)
+                                if (Test-Path $expandedPath) {
+                                    $pathSize = Get-DirectorySize-Formatted $expandedPath
+                                    if ($pathSize.Bytes -gt 0) {
+                                        $totalCacheSize += $pathSize.Bytes
+                                        $validPaths.Add($expandedPath) | Out-Null
+                                    }
+                                }
+                            } catch {}
                         }
+                    }
+
+                    if ($totalCacheSize -gt 0) {
+                        $details.Size = $totalCacheSize
+                        $details.VerifiedPaths = $validPaths 
+                        $foundItems.Add([pscustomobject]@{ Group = $appName; ItemName = $cacheType.Name; Details = $details; Processes = $appProcesses })
                     }
                 }
             }
 
-            # ETAPA 3: Popular a interface
+            # --- ETAPA 3: Popular a interface ---
             if ($foundItems.Count -eq 0) {
                 Update-Status "Nenhum arquivo para limpeza foi encontrado."
             } else {
-                $groupedItems = $foundItems | Group-Object -Property Group
+                $groupedItems = $foundItems | Group-Object -Property Group | Sort-Object Name
                 foreach ($group in $groupedItems) {
                     $parentNode = New-Object System.Windows.Forms.TreeNode($group.Name)
                     if ($group.Group[0].Processes) { $parentNode.Tag = $group.Group[0].Processes }
+                    
                     foreach ($item in $group.Group) {
                         $formattedSize = (Get-DirectorySize-Formatted $item.Details.Size).Formatted
                         $childNode = New-Object System.Windows.Forms.TreeNode("$($item.ItemName) ($formattedSize)")
                         $childNode.Tag = $item.Details
+                        
+                        if ($item.Processes) { 
+                            if ($item.Details -is [System.Collections.IDictionary]) {
+                                $item.Details['Processes'] = $item.Processes
+                            }
+                        }
+                        
                         $parentNode.Nodes.Add($childNode) | Out-Null
                     }
                     $filesPanel.Control.Nodes.Add($parentNode) | Out-Null
@@ -1467,6 +1868,7 @@ function Analyze-CleanableFiles {
                 $filesPanel.CleanButton.Enabled = $true
                 $filesPanel.Control.ExpandAll()
                 $filesPanel.Control.Nodes | ForEach-Object { $_.Checked = $true; $_.Nodes | ForEach-Object { $_.Checked = $true } }
+                if ($filesPanel.Control.Nodes.Count -gt 0) { $filesPanel.Control.Nodes[0].EnsureVisible() }
             }
         }
         catch { Update-Status "ERRO CRITICO durante a analise de arquivos: $($_.Exception.Message)" }
@@ -1593,14 +1995,6 @@ function Scan-OutdatedChocoApps { $scanChocoButton.Enabled = $false; $updateChoc
 function Update-RegisteredAppsList {
     $regUpdatesListView.Items.Clear()
     $script:cachedInstalledApps = [ordered]@{}
-    $chocoApps = @{}
-    try {
-        $chocoExe = "$env:ProgramData\chocolatey\bin\choco.exe"
-        if (Test-Path $chocoExe) {
-            $chocoList = & $chocoExe list -li -r 2>$null
-            if ($LASTEXITCODE -eq 0) { $chocoList | ForEach-Object { $parts = $_.Split('|'); if ($parts.Count -ge 2) { $chocoApps[$parts[0]] = $parts[1] } } }
-        }
-    } catch { Update-Status "AVISO: Nao foi possivel listar os pacotes Chocolatey." }
 
     # --- ETAPA 1: Varrer o registro (programas tradicionais) ---
     Update-Status "... Verificando aplicativos tradicionais (Registro)..."
@@ -1610,24 +2004,20 @@ function Update-RegisteredAppsList {
             $key = $_; $name = $key.GetValue("DisplayName"); $uninstallString = $key.GetValue("UninstallString")
             if ((-not [string]::IsNullOrWhiteSpace($name)) -and (-not [string]::IsNullOrWhiteSpace($uninstallString)) -and ($key.GetValue("SystemComponent") -ne 1)) {
                 if (-not ($script:cachedInstalledApps.Keys -contains $name)) {
-                    $origin = "Windows"; $chocoMatch = $chocoApps.Keys | Where-Object { $name -match ('^' + [regex]::Escape($_) + '(\s|$)') } | Select-Object -First 1
-                    if ($chocoMatch) { $origin = "Chocolatey" }
-                    $script:cachedInstalledApps[$name] = [pscustomobject]@{ Name = $name; Version = $key.GetValue("DisplayVersion"); Publisher = $key.GetValue("Publisher"); UninstallString = $uninstallString; Origin = $origin }
+                    # Assumimos origem Windows por padrao para ser rapido
+                    $script:cachedInstalledApps[$name] = [pscustomobject]@{ Name = $name; Version = $key.GetValue("DisplayVersion"); Publisher = $key.GetValue("Publisher"); UninstallString = $uninstallString; Origin = "Windows" }
                 }
             }
         }
     }
     
-    # --- ETAPA 2 (NOVA E CORRIGIDA): Varrer pacotes da Microsoft Store (Appx) ---
+    # --- ETAPA 2: Varrer pacotes da Microsoft Store (Appx) ---
     Update-Status "... Verificando aplicativos da Microsoft Store..."
     try {
-        # Usamos -PackageTypeFilter Main para focar em apps de usuario, nao componentes de sistema
         Get-AppxPackage -PackageTypeFilter Main | ForEach-Object {
             $app = $_
-            # O nome de exibicao do app da Store e mais confiavel para a comparacao
             $displayName = (Get-AppxPackageManifest $app).Package.Properties.DisplayName
             
-            # Garante que nao e um componente de sistema e que ainda nao foi adicionado
             if ($app.SignatureKind -ne "System" -and (-not [string]::IsNullOrWhiteSpace($displayName)) -and (-not ($script:cachedInstalledApps.Keys -contains $displayName))) {
                  $script:cachedInstalledApps[$displayName] = [pscustomobject]@{
                     Name            = $displayName
@@ -1640,15 +2030,7 @@ function Update-RegisteredAppsList {
         }
     } catch { Update-Status "AVISO: Nao foi possivel listar os pacotes da Microsoft Store."}
 
-
-    # --- ETAPA 3: Adicionar aplicativos que so existem no Chocolatey ---
-    foreach ($chocoApp in $chocoApps.GetEnumerator()) {
-        if (-not ($script:cachedInstalledApps.Keys -contains $chocoApp.Name)) {
-            $script:cachedInstalledApps[$chocoApp.Name] = [pscustomobject]@{ Name = $chocoApp.Name; Version = $chocoApp.Value; Publisher = "Chocolatey Package"; UninstallString = "choco uninstall $($chocoApp.Name)"; Origin = "Chocolatey" }
-        }
-    }
-
-    # --- ETAPA 4: Ordenar e popular a interface ---
+    # --- ETAPA 3: Ordenar e popular a interface ---
     $sortedApps = $script:cachedInstalledApps.Values | Sort-Object Name
     $regUpdatesListView.BeginUpdate()
     $i = 1
@@ -1858,24 +2240,8 @@ function Analyze-Bloatware {
     $panel.CleanButton.Enabled = $false
     $panel.Control.Items.Clear()
     
-    Run-Task "Verificar Apps Nativos (Winget)" {
-	# Garante que o winget esta disponivel antes de tentar usa-lo
-        Ensure-WingetIsInstalled
-        $upg = @{}
-        try {
-            $out = winget upgrade --include-unknown --accept-source-agreements
-            $out | Select-Object -Skip 2 | ForEach-Object {
-			$line = $_ -split '\s\s+'
-			if ($line.Count -ge 4) {
-                    $id = $line[1].Trim()
-                    $ver = $line[3].Trim()
-                    if (-not [string]::IsNullOrEmpty($id)) {
-                        $upg[$id] = $ver
-                    }
-                }
-            }
-        } catch {}
-        
+    Run-Task "Verificar Apps Nativos (Local)" {
+       
         $all = $script:config.BloatwareApps
         $panel.Control.BeginUpdate()
         $i = 1
@@ -1883,23 +2249,24 @@ function Analyze-Bloatware {
             $tech = $e.Name
             $friendly = $e.Value.FriendlyName
             $wid = $e.Value.WingetId
+            
+            # Verificacao nativa rapida (sem internet/winget)
             $app = Get-AppxPackage -AllUsers -Name $tech -EA SilentlyContinue | Select -First 1
             
             $item = New-Object System.Windows.Forms.ListViewItem($i.ToString())
             $item.SubItems.Add($friendly) | Out-Null
             
             if ($app) {
-                if ($wid -and $upg.ContainsKey($wid)) {
-                    $item.SubItems.Add("Atualizacao Disponivel") | Out-Null
-                    $item.Tag = @{ A = "Upgrade"; W = $wid; P = $app.PackageFullName }
-                } else {
-                    $item.SubItems.Add("Instalado") | Out-Null
-                    $item.ForeColor = [System.Drawing.Color]::LightGreen
-                    $item.Tag = @{ A = "Remove"; P = $app.PackageFullName }
-                }
+                # Se o app existe, marcamos como instalado e pronto para remover
+                $item.SubItems.Add("Instalado") | Out-Null
+                $item.ForeColor = [System.Drawing.Color]::LightGreen
+                $item.Tag = @{ A = "Remove"; P = $app.PackageFullName }
             } else {
                 $item.SubItems.Add("Nao Encontrado") | Out-Null
                 $item.ForeColor = [System.Drawing.Color]::DarkGray
+                
+                # Se tiver ID do Winget, preparamos para instalar, mas o Winget so sera validado
+                # se o usuario clicar em "Aplicar Acoes".
                 if (-not [string]::IsNullOrWhiteSpace($wid)) {
                     $item.Tag = @{ A = "Install"; W = $wid }
                 } else {
@@ -1983,18 +2350,18 @@ function Analyze-RegistryIssues {
         $regCleanerListView.BeginUpdate()
         
         try {
-            # Verifica desinstaladores orfaos
+            # --- 1. Desinstaladores Orfaos (Ja existia) ---
             $uninst = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall", "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")
             foreach ($p in $uninst) {
                 Get-ChildItem -Path $p -EA SilentlyContinue | ForEach-Object {
                     $loc = $_.GetValue("InstallLocation")
-                    if ($loc -and -not (Test-Path $loc)) {
+                    if ($loc -and -not (Test-Path -LiteralPath $loc -ErrorAction SilentlyContinue)) {
                         $res.Add(@{ Type = "Desinstalador Orfao"; Path = $_.PSPath; DisplayPath = $_.Name; Location = "Pasta: $loc"; Tag = $_.PSPath })
                     }
                 }
             }
             
-            # Verifica inicializacao invalida
+            # --- 2. Inicializacao Invalida (Otimizado) ---
             $run = @("HKCU:\Software\Microsoft\Windows\CurrentVersion\Run", "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run")
             foreach ($p in $run) {
                 $key = Get-Item -Path $p -EA SilentlyContinue
@@ -2002,48 +2369,93 @@ function Analyze-RegistryIssues {
                     foreach ($val in $key.GetValueNames()) {
                         $cmd = $key.GetValue($val)
                         if ($cmd -is [string]) {
-                            $cmdStr = $cmd.Trim()
-                            $exe = $cmdStr
-                            $match = [regex]::Match($cmdStr, '(\s[/-].*)')
-                            if ($match.Success) {
-                                $exe = $cmdStr.Substring(0, $match.Index).Trim()
+                            $cmdStr = $cmd.Trim(); $exePath = $null
+                            if ($cmdStr.StartsWith('"')) {
+                                $endQuote = $cmdStr.IndexOf('"', 1)
+                                if ($endQuote -gt 0) { $exePath = $cmdStr.Substring(1, $endQuote - 1) } else { $exePath = $cmdStr.Trim('"') }
+                            } elseif ($cmdStr -match '(?i)\.exe') {
+                                $exeIndex = $cmdStr.ToLower().IndexOf(".exe")
+                                $exePath = $cmdStr.Substring(0, $exeIndex + 4)
+                            } else {
+                                $firstSpace = $cmdStr.IndexOf(' '); if ($firstSpace -gt 0) { $exePath = $cmdStr.Substring(0, $firstSpace) } else { $exePath = $cmdStr }
                             }
-                            $exe = $exe.Trim('"')
-                            
-                            # --- INICIO DA CORRECAO (Test-Path Robusto) ---
                             $pathIsValid = $false
-                            $pathIsMissing = $false
-                            if ($exe) {
-                                try {
-                                    $pathIsValid = Test-Path $exe -ErrorAction Stop
-                                } catch [System.ArgumentException] {
-                                    $pathIsValid = $false
-                                    Update-Status "AVISO (Registro): Encontrado valor de inicializacao com formato invalido: $exe"
-                                } catch {
-                                    $pathIsValid = $false
-                                    Update-Status "AVISO (Registro): Erro ao testar o caminho: $exe. Detalhes: $($_.Exception.Message)"
-                                }
-                                if (-not $pathIsValid) {
-                                    $pathIsMissing = $true
-                                }
-                            }
-                            if ($pathIsMissing) {
-                            # --- FIM DA CORRECAO ---
+                            if (-not [string]::IsNullOrWhiteSpace($exePath)) {
+                                if ($exePath -notlike "*\*") { $pathIsValid = $true } else { $pathIsValid = Test-Path -LiteralPath $exePath -ErrorAction SilentlyContinue }
+                            } else { $pathIsValid = $true }
+
+                            if (-not $pathIsValid) {
                                 $res.Add(@{ Type = "Inicializacao Invalida"; Path = $key.PSPath; DisplayPath = $key.Name; Location = "Valor: $val"; Tag = @{ Path = $key.PSPath; ValueName = $val } })
                             }
                         }
                     }
                 }
             }
+
+            # --- 3. Referencias de Instaladores (O que gera mais erros no CCleaner) ---
+            # O Windows guarda em 'Installer\Folders' caminhos de pastas que ele acha que existem.
+            $installerFoldersPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\Folders")
+            foreach ($regPath in $installerFoldersPaths) {
+                if (Test-Path $regPath) {
+                    $key = Get-Item $regPath
+                    foreach ($folderPath in $key.GetValueNames()) {
+                        # O nome do valor é o caminho. O conteúdo geralmente é vazio ou "1".
+                        if (-not [string]::IsNullOrWhiteSpace($folderPath) -and $folderPath.Contains("\")) {
+                            if (-not (Test-Path -LiteralPath $folderPath -ErrorAction SilentlyContinue)) {
+                                $res.Add(@{ Type = "Pasta de Instalador Invalida"; Path = $key.PSPath; DisplayPath = "Installer Reference"; Location = $folderPath; Tag = @{ Path = $key.PSPath; ValueName = $folderPath } })
+                            }
+                        }
+                    }
+                }
+            }
+
+            # --- 4. DLLs Compartilhadas Inexistentes (SharedDLLs) ---
+            $sharedDllsPaths = @(
+                "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedDLLs", 
+                "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\SharedDLLs"
+            )
+            foreach ($regPath in $sharedDllsPaths) {
+                if (Test-Path $regPath) {
+                    $key = Get-Item $regPath
+                    foreach ($dllPath in $key.GetValueNames()) {
+                        if (-not [string]::IsNullOrWhiteSpace($dllPath) -and $dllPath.Contains("\")) {
+                            # Verifica se o arquivo DLL realmente existe
+                            if (-not (Test-Path -LiteralPath $dllPath -ErrorAction SilentlyContinue)) {
+                                $res.Add(@{ Type = "DLL Compartilhada Faltando"; Path = $key.PSPath; DisplayPath = "SharedDLL"; Location = $dllPath; Tag = @{ Path = $key.PSPath; ValueName = $dllPath } })
+                            }
+                        }
+                    }
+                }
+            }
+
+            # --- 5. Arquivos de Ajuda Invalidos ---
+            $helpPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\Help")
+            foreach ($regPath in $helpPaths) {
+                if (Test-Path $regPath) {
+                    $key = Get-Item $regPath
+                    foreach ($helpFile in $key.GetValueNames()) {
+                         # Às vezes o valor é o caminho, às vezes é o nome. Vamos checar o valor.
+                         $pathToFile = $key.GetValue($helpFile)
+                         if ($pathToFile -is [string] -and $pathToFile.Contains("\")) {
+                             if (-not (Test-Path -LiteralPath $pathToFile -ErrorAction SilentlyContinue)) {
+                                 $res.Add(@{ Type = "Arquivo de Ajuda Invalido"; Path = $key.PSPath; DisplayPath = "Help File"; Location = $pathToFile; Tag = @{ Path = $key.PSPath; ValueName = $helpFile } })
+                             }
+                         }
+                    }
+                }
+            }
             
-            # Verifica Cache MUI Obsoleto
+            # --- 6. Cache MUI Obsoleto (Mantido) ---
             $mui = "HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"
             if (Test-Path $mui) {
                 $key = Get-Item -Path $mui
                 foreach ($val in $key.GetValueNames()) {
                     if ($val -like "*:\*") {
                         $exe = $val.Split(',')[0]
-                        if (-not (Test-Path $exe)) {
+                        if ($exe.Contains(".exe")) {
+                             $exeIndex = $exe.ToLower().IndexOf(".exe"); $exe = $exe.Substring(0, $exeIndex + 4)
+                        }
+                        if (-not (Test-Path -LiteralPath $exe -ErrorAction SilentlyContinue)) {
                             $res.Add(@{ Type = "Cache MUI Obsoleto"; Path = $key.PSPath; DisplayPath = $key.Name; Location = "Executavel: $exe"; Tag = @{ Path = $key.PSPath; ValueName = $val } })
                         }
                     }
@@ -2459,92 +2871,102 @@ function Clean-OrphanedRegistryEntries {
     }
 }
 
-# --- AJUSTE E DEPOIS ---
 function Start-ResetWebExperience {
-    
     $atLeastOneActionSucceeded = $false
     $errors = [System.Collections.ArrayList]::new()
     
-    # --- TENTATIVA 1: Redefinir pacotes Appx (se existirem) ---
-    Write-Output "Tentativa 1: Procurando pacotes Appx de pesquisa (WebExperience, SearchApp)..."
+    Update-Status "Iniciando redefinição da Experiência de Pesquisa..."
+
+    # --- ETAPA 0 (NOVA): Matar processos que bloqueiam o reset ---
+    # Isso é crucial. Se o SearchHost estiver rodando, o Reset-AppxPackage falha.
+    $processesToKill = @("SearchApp", "SearchHost", "StartMenuExperienceHost", "ShellExperienceHost")
+    foreach ($procName in $processesToKill) {
+        if (Get-Process -Name $procName -ErrorAction SilentlyContinue) {
+            Update-Status "... Encerrando processo: $procName (para liberar arquivos)"
+            Stop-Process -Name $procName -Force -ErrorAction SilentlyContinue
+        }
+    }
+    # Pequena pausa para o sistema liberar os handles dos arquivos
+    Start-Sleep -Seconds 2
+
+    # --- ETAPA 1: Redefinir pacotes Appx (se existirem) ---
+    Update-Status "Tentativa 1: Procurando e resetando pacotes Appx de pesquisa..."
     try {
         $patterns = @("*WebExperience*", "*SearchApp*", "*Windows.Search*")
         $packagesToReset = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
         
         foreach ($pattern in $patterns) {
+            # Filtramos para pegar apenas pacotes 'Main' (do usuário) ou que não sejam puramente de sistema intocável
             $foundPackages = Get-AppxPackage -Name $pattern -ErrorAction SilentlyContinue | Where-Object { $_.SignatureKind -ne "System" }
             foreach ($pkg in $foundPackages) {
                 if ($packagesToReset.Add($pkg.PackageFullName)) {
-                     Write-Output "Pacote Appx relevante encontrado: $($pkg.PackageFullName)"
+                     Update-Status "... Pacote identificado: $($pkg.Name)"
                 }
             }
         }
 
         if ($packagesToReset.Count -gt 0) {
-            Write-Output "Iniciando redefinicao de $($packagesToReset.Count) pacote(s) Appx..."
             foreach ($packageName in $packagesToReset) {
                 try {
+                    Update-Status "... Resetando: $packageName"
                     $package = Get-AppxPackage -Name $packageName -ErrorAction Stop
                     $package | Reset-AppxPackage -ErrorAction Stop
-                    Write-Output "Redefinicao de '$packageName' concluida."
+                    Update-Status "--> SUCESSO: Pacote '$packageName' redefinido."
                     $atLeastOneActionSucceeded = $true
                 } catch {
-                    $errMsg = "AVISO: Falha ao redefinir '$packageName'. Erro: $($_.Exception.Message)"
-                    Write-Output $errMsg
+                    $errMsg = "AVISO: Falha ao redefinir '$packageName'. (O Windows pode estar bloqueando). Erro: $($_.Exception.Message)"
+                    Update-Status $errMsg
                     $errors.Add($errMsg) | Out-Null
                 }
             }
         } else {
-            Write-Output "Nenhum pacote Appx de pesquisa encontrado. Pulando para a Tentativa 2."
+            Update-Status "Nenhum pacote Appx de pesquisa encontrado para resetar (Normal em algumas versões do Win10/11)."
         }
     } catch {
-        $errMsg = "AVISO: Falha inesperada durante a busca por pacotes Appx. Erro: $($_.Exception.Message)"
-        Write-Output $errMsg
+        $errMsg = "AVISO: Erro genérico na busca por pacotes Appx. Erro: $($_.Exception.Message)"
+        Update-Status $errMsg
         $errors.Add($errMsg) | Out-Null
     }
 
-    # --- TENTATIVA 2: Reconstruir o Índice do Windows Search (WSearch) ---
-    Write-Output "Tentativa 2: Reconstruindo o indice do servico Windows Search (WSearch)..."
+    # --- ETAPA 2: Reconstruir o Índice do Windows Search (WSearch) ---
+    Update-Status "Tentativa 2: Recriando banco de dados do índice (WSearch)..."
     try {
         $service = Get-Service -Name "WSearch" -ErrorAction Stop
         if ($service.Status -ne 'Stopped') {
-            Write-Output "Parando o servico 'WSearch'..."
+            Update-Status "... Parando serviço 'WSearch'"
             Stop-Service -Name "WSearch" -Force -ErrorAction Stop
-            Write-Output "Servico 'WSearch' parado."
         }
         
+        # Local padrão do banco de dados do índice
         $indexPath = "$env:ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb"
         if (Test-Path $indexPath) {
-            Write-Output "Removendo o banco de dados do indice atual ($indexPath)..."
+            Update-Status "... Removendo arquivo de índice corrompido/antigo (Windows.edb)"
             Remove-Item -Path $indexPath -Force -ErrorAction Stop
-            Write-Output "Banco de dados do indice removido."
-        } else {
-            Write-Output "Banco de dados do indice nao encontrado (o que e normal se o servico nunca rodou). Pulando remocao."
         }
         
-        Write-Output "Reiniciando o servico 'WSearch' para forcar a reconstrucao."
+        Update-Status "... Reiniciando serviço 'WSearch'"
         Start-Service -Name "WSearch" -ErrorAction Stop
         $atLeastOneActionSucceeded = $true
-        Write-Output "O indice do Windows Search comecara a ser reconstruido em segundo plano (isso pode levar alguns minutos)."
+        Update-Status "--> Índice recriado. O Windows começará a reindexar em segundo plano."
     } catch {
-        $errMsg = "ERRO: Falha ao tentar reconstruir o indice do Windows Search. Erro: $($_.Exception.Message)"
-        Write-Output $errMsg
+        $errMsg = "ERRO: Falha ao manipular serviço WSearch. Erro: $($_.Exception.Message)"
+        Update-Status $errMsg
         $errors.Add($errMsg) | Out-Null
-        # Tenta reiniciar o serviço por garantia
+        # Tenta reiniciar o serviço por garantia caso tenha ficado parado
         try { Start-Service -Name "WSearch" -ErrorAction SilentlyContinue } catch {}
     }
 
-    # --- Verificacao Final ---
+    # --- Verificação Final ---
     if (-not $atLeastOneActionSucceeded) {
-        $allErrors = $errors -join "`n"
-        throw "Falha em TODAS as tentativas de redefinir a pesquisa (Appx e Servico). Erros: $allErrors"
+        throw "Falha total: Não foi possível resetar Appx nem o Serviço de Busca."
     }
     
-    Write-Output "Redefinicao de pesquisa concluida com sucesso."
+    Update-Status "Redefinição de pesquisa concluída."
 }
+
 # --- CRIAcaO DO FORMULARio (continuacao) ---
 $form = New-Object System.Windows.Forms.Form
-$form.Text = 'AZTools 2 || Build 24102025.2'
+$form.Text = 'AZTools 2.1 || Build 25112025-Nightly'
 $form.Size = New-Object System.Drawing.Size(1200, 700) 
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = 'None'
@@ -2678,19 +3100,22 @@ $bloatwarePanel.Control.Name = 'bloatwareListView' # Atribui um nome para o esta
 $bloatwarePanel.Control.Add_ColumnClick({ Sort-ListView @args }) # Adiciona o evento de ordenacao
 $debloatTablePanel.Controls.Add($bloatwarePanel.Group, 1, 0)
 
-# Aba Limpeza de Arquivos e Registros
+# --- Aba Limpeza de Arquivos e Registros ---
 $filesAndRegTablePanel = New-Object System.Windows.Forms.TableLayoutPanel; $filesAndRegTablePanel.Dock = "Fill"; $filesAndRegTablePanel.ColumnCount = 2
 $filesAndRegTablePanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
 $filesAndRegTablePanel.ColumnStyles.Add((New-Object System.Windows.Forms.ColumnStyle([System.Windows.Forms.SizeType]::Percent, 50)))
 $filesTabPage.Controls.Add($filesAndRegTablePanel)
+
+# Lado Esquerdo (Arquivos)
 $filesPanel = Create-TreeViewAnalysisPanel "Limpeza de Arquivos" "Analisar Arquivos" "Limpar Selecionados"
 $filesAndRegTablePanel.Controls.Add($filesPanel.Group, 0, 0)
 
-# Cria o painel de Limpeza de Registro e o adiciona na coluna da direita
+# Lado Direito (Registro) - INICIO DA CORREÇÃO
 $regCleanerGroup = New-Object System.Windows.Forms.GroupBox; $regCleanerGroup.Text = "Limpeza de Registro"; $regCleanerGroup.Dock = "Fill"
+
 $regCleanerListView = New-Object System.Windows.Forms.ListView; $regCleanerListView.Dock = "Fill"; $regCleanerListView.View = "Details"; $regCleanerListView.CheckBoxes = $true
-$regCleanerListView.Name = 'registryCleanerListView' # Atribui um nome para o estado da ordenacao
-$regCleanerListView.Add_ColumnClick({ Sort-ListView @args }) # Adiciona o evento de ordenacao
+$regCleanerListView.Name = 'registryCleanerListView' 
+$regCleanerListView.Add_ColumnClick({ Sort-ListView @args }) 
 Add-ListViewColumns $regCleanerListView @("(#)", "Tipo", "Registro", "Localizacao")
 
 $regCleanerSummaryLabel = New-Object System.Windows.Forms.Label
@@ -2698,14 +3123,28 @@ $regCleanerSummaryLabel.Dock = "Bottom"
 $regCleanerSummaryLabel.Text = "Total de itens selecionados: 0"
 $regCleanerSummaryLabel.TextAlign = "MiddleRight"
 $regCleanerSummaryLabel.Padding = New-Object System.Windows.Forms.Padding(0,0,5,5)
-$regCleanerButtonPanel = New-Object System.Windows.Forms.Panel; $regCleanerButtonPanel.Height = 30; $regCleanerButtonPanel.Dock = "Bottom"
-$analyzeRegButton = New-Object System.Windows.Forms.Button; $analyzeRegButton.Text = "Analisar"; $analyzeRegButton.Dock = "Left"; $analyzeRegButton.Width = 100
-$backupRegButton = New-Object System.Windows.Forms.Button; $backupRegButton.Text = "Fazer Backup"; $backupRegButton.Dock = "Left"; $backupRegButton.Width = 120; $backupRegButton.Enabled = $false
-$cleanRegButton = New-Object System.Windows.Forms.Button; $cleanRegButton.Text = "Limpar Selecionados"; $cleanRegButton.Dock = "Right"; $cleanRegButton.Width = 150; $cleanRegButton.Enabled = $false
-$regCleanerButtonPanel.Controls.AddRange(@($analyzeRegButton, $backupRegButton, $cleanRegButton))
-$regCleanerGroup.Controls.AddRange(@($regCleanerListView, $regCleanerSummaryLabel, $regCleanerButtonPanel))
-$filesAndRegTablePanel.Controls.Add($regCleanerGroup, 1, 0)
 
+$regCleanerButtonPanel = New-Object System.Windows.Forms.Panel; $regCleanerButtonPanel.Height = 30; $regCleanerButtonPanel.Dock = "Bottom"
+
+# Botões Corrigidos com AutoSize
+$analyzeRegButton = New-Object System.Windows.Forms.Button; $analyzeRegButton.Text = "Analisar"; $analyzeRegButton.Dock = "Left"
+$analyzeRegButton.AutoSize = $true; $analyzeRegButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $analyzeRegButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+
+$backupRegButton = New-Object System.Windows.Forms.Button; $backupRegButton.Text = "Fazer Backup"; $backupRegButton.Dock = "Left"; $backupRegButton.Enabled = $false
+$backupRegButton.AutoSize = $true; $backupRegButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $backupRegButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+
+$cleanRegButton = New-Object System.Windows.Forms.Button; $cleanRegButton.Text = "Limpar Selecionados"; $cleanRegButton.Dock = "Right"; $cleanRegButton.Enabled = $false
+$cleanRegButton.AutoSize = $true; $cleanRegButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $cleanRegButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+
+# 1. Adiciona botões ao painel de botões
+$regCleanerButtonPanel.Controls.AddRange(@($analyzeRegButton, $backupRegButton, $cleanRegButton))
+
+# 2. Adiciona Lista, Label e Botões ao Grupo (GroupBox)
+$regCleanerGroup.Controls.AddRange(@($regCleanerListView, $regCleanerSummaryLabel, $regCleanerButtonPanel))
+
+# 3. Adiciona o Grupo ao Painel Principal (Lado Direito - Coluna 1)
+$filesAndRegTablePanel.Controls.Add($regCleanerGroup, 1, 0)
+# --- FIM DA CORREÇÃO ---
 # Endpoint Security
 # CRIA UM PAINEL DE LAYOUT PARA ABRIGAR O AVISO E A LISTA
 $endpointContainerPanel = New-Object System.Windows.Forms.TableLayoutPanel
@@ -2737,18 +3176,18 @@ $treeViewForApps = New-Object System.Windows.Forms.TreeView
 $treeViewForApps.CheckBoxes = $true
 $appsTreeView = Create-TitledControlPanel $softwaresTablePanel "Instalacao de Aplicativos e Atalhos" $treeViewForApps
 
-# --- INICIO: Adiciona o botao de Limpar Cache do Chocolatey ---
 $appsTreeGroup = $appsTreeView.Parent
 $appsTreeButtonPanel = $appsTreeGroup.Controls | Where-Object { $_ -is [System.Windows.Forms.Panel] }
 
 $cleanChocoCacheButton = New-Object System.Windows.Forms.Button
 $cleanChocoCacheButton.Text = "Limpar Cache Choco"
 $cleanChocoCacheButton.Dock = "Left"
-$cleanChocoCacheButton.Width = 140
-$cleanChocoCacheButton.BringToFront() # Garante que ele apareca na frente dos outros
+$cleanChocoCacheButton.AutoSize = $true
+$cleanChocoCacheButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+$cleanChocoCacheButton.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+$cleanChocoCacheButton.BringToFront() 
 
 $appsTreeButtonPanel.Controls.Add($cleanChocoCacheButton)
-# --- FIM: Adiciona o botao de Limpar Cache do Chocolatey ---
 
 $managementSplitContainer = New-Object System.Windows.Forms.SplitContainer; $managementSplitContainer.Dock = "Fill"; $managementSplitContainer.Orientation = "Horizontal"
 $softwaresTablePanel.Controls.Add($managementSplitContainer, 1, 0)
@@ -2761,8 +3200,23 @@ $chocoUpdatesListView.Add_ColumnClick({ Sort-ListView @args }) # Adiciona o even
 Add-ListViewColumns $chocoUpdatesListView @("(#)", "Nome", "Versao Atual", "Nova Versao")
 $chocoUpdatesButtonPanel = New-Object System.Windows.Forms.Panel; $chocoUpdatesButtonPanel.Height = 30; $chocoUpdatesButtonPanel.Dock = "Bottom"
 
-$scanChocoButton = New-Object System.Windows.Forms.Button; $scanChocoButton.Text = "Scanner Choco"; $scanChocoButton.Dock = "Left"; $scanChocoButton.Width = 120
-$updateChocoButton = New-Object System.Windows.Forms.Button; $updateChocoButton.Text = "Atualizar Selecionados"; $updateChocoButton.Dock = "Right"; $updateChocoButton.Width = 150; $updateChocoButton.Enabled = $false
+# Botão Scanner Choco
+$scanChocoButton = New-Object System.Windows.Forms.Button
+$scanChocoButton.Text = "Scanner Choco"
+$scanChocoButton.Dock = "Left"
+$scanChocoButton.AutoSize = $true
+$scanChocoButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+$scanChocoButton.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+
+# Botão Atualizar Selecionados
+$updateChocoButton = New-Object System.Windows.Forms.Button
+$updateChocoButton.Text = "Atualizar Selecionados"
+$updateChocoButton.Dock = "Right"
+$updateChocoButton.Enabled = $false
+$updateChocoButton.AutoSize = $true
+$updateChocoButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+$updateChocoButton.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+
 $chocoUpdatesButtonPanel.Controls.AddRange(@($scanChocoButton, $updateChocoButton))
 $chocoUpdatesGroup.Controls.AddRange(@($chocoUpdatesListView, $chocoUpdatesButtonPanel))
 
@@ -2778,14 +3232,38 @@ $regUpdatesListView.Name = 'registeredAppsListView' # Atribui um nome para o est
 $regUpdatesListView.Add_ColumnClick({ Sort-ListView @args }) # Adiciona o evento de ordenacao
 Add-ListViewColumns $regUpdatesListView @("Origem", "(#)", "Nome", "Versao", "Desenvolvedor")
 $regButtonPanel = New-Object System.Windows.Forms.Panel; $regButtonPanel.Height = 30; $regButtonPanel.Dock = "Bottom"
-$scanRegButton = New-Object System.Windows.Forms.Button; $scanRegButton.Text = "Scanner Registro"; $scanRegButton.Dock = "Left"; $scanRegButton.Width = 120
 
-$searchForUpdateButton = New-Object System.Windows.Forms.Button; $searchForUpdateButton.Text = "Pesquisar Att."; $searchForUpdateButton.Dock = "Right"; $searchForUpdateButton.Width = 120; $searchForUpdateButton.Enabled = $false
-$uninstallRegButton = New-Object System.Windows.Forms.Button; $uninstallRegButton.Text = "Desinstalar Selecionados"; $uninstallRegButton.Dock = "Right"; $uninstallRegButton.Width = 180; $uninstallRegButton.Enabled = $false
-$regButtonPanel.Controls.AddRange(@($scanRegButton, $uninstallRegButton, $searchForUpdateButton))
-$regUpdatesGroup.Controls.AddRange(@($regUpdatesListView, $regSearchBox, $regButtonPanel))
+# Botão Scanner Registro
+$scanRegButton = New-Object System.Windows.Forms.Button
+$scanRegButton.Text = "Scanner Registro"
+$scanRegButton.Dock = "Left"
+$scanRegButton.AutoSize = $true
+$scanRegButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+$scanRegButton.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+
+# Botão Pesquisar Att.
+$searchForUpdateButton = New-Object System.Windows.Forms.Button
+$searchForUpdateButton.Text = "Pesquisar Att."
+$searchForUpdateButton.Dock = "Right"
+$searchForUpdateButton.Enabled = $false
+$searchForUpdateButton.AutoSize = $true
+$searchForUpdateButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+$searchForUpdateButton.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+
+# Botão Desinstalar Selecionados
+$uninstallRegButton = New-Object System.Windows.Forms.Button
+$uninstallRegButton.Text = "Desinstalar Selecionados"
+$uninstallRegButton.Dock = "Right"
+$uninstallRegButton.Enabled = $false
+$uninstallRegButton.AutoSize = $true
+$uninstallRegButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink
+$uninstallRegButton.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
+
+# A ordem aqui define quem fica mais à direita. 
+# O primeiro adicionado com Dock=Right fica na extrema direita.
+$regButtonPanel.Controls.AddRange(@($scanRegButton, $searchForUpdateButton, $uninstallRegButton))
+$regUpdatesGroup.Controls.AddRange(@($regUpdatesListView, $regButtonPanel, $regSearchBox))
 $managementSplitContainer.Panel2.Controls.Add($regUpdatesGroup)
-
 
 # Aba God Mode
 $godModeGroup = New-Object System.Windows.Forms.GroupBox; $godModeGroup.Text = "Atalhos do Painel de Controle (Duplo Clique para Abrir)"; $godModeGroup.Dock = "Fill"
@@ -2797,16 +3275,26 @@ Add-ListViewColumns $godModeListView @("Nome da Configuracao", "Comando")
 $godModeGroup.Controls.AddRange(@($godModeListView, $godModeSearchBox))
 $godModeTabPage.Controls.Add($godModeGroup)
 
-
 # --- Controles Principais (Log, Botoes, Progresso) ---
 $statusGroup = New-Object System.Windows.Forms.GroupBox; $statusGroup.Text = "Log de Execucao";
 $statusBox = New-Object System.Windows.Forms.TextBox; $statusBox.Multiline = $true; $statusBox.Dock = "Fill"; $statusBox.ScrollBars = "Vertical"; $statusBox.Font = "Consolas, 10"; $statusBox.ReadOnly = $true; $statusGroup.Controls.Add($statusBox)
 $mainButtonPanel = New-Object System.Windows.Forms.Panel; $mainButtonPanel.Height = 40; $mainButtonPanel.Dock = "Bottom"
-$runCurrentTabButton = New-Object System.Windows.Forms.Button; $runCurrentTabButton.Text = "Executar Aba Atual"; $runCurrentTabButton.Dock = "Left"; $runCurrentTabButton.Width = 150
-$runAllButton = New-Object System.Windows.Forms.Button; $runAllButton.Text = "Executar Tudo"; $runAllButton.Dock = "Left"; $runAllButton.Width = 150
-$clearLogButton = New-Object System.Windows.Forms.Button; $clearLogButton.Text = "Limpar Log"; $clearLogButton.Dock = "Right"; $clearLogButton.Width = 120
-$closeButtonMain = New-Object System.Windows.Forms.Button; $closeButtonMain.Text = "Fechar"; $closeButtonMain.Dock = "Right"; $closeButtonMain.Width = 120
 
+# Botões Esquerda (Executar) - AutoSize e Padding maior para destaque
+$runCurrentTabButton = New-Object System.Windows.Forms.Button; $runCurrentTabButton.Text = "Executar Aba Atual"; $runCurrentTabButton.Dock = "Left"
+$runCurrentTabButton.AutoSize = $true; $runCurrentTabButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $runCurrentTabButton.Padding = New-Object System.Windows.Forms.Padding(15,0,15,0)
+
+$runAllButton = New-Object System.Windows.Forms.Button; $runAllButton.Text = "Executar Tudo"; $runAllButton.Dock = "Left"
+$runAllButton.AutoSize = $true; $runAllButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $runAllButton.Padding = New-Object System.Windows.Forms.Padding(15,0,15,0)
+
+# Botões Direita (Fechar/Log)
+$clearLogButton = New-Object System.Windows.Forms.Button; $clearLogButton.Text = "Limpar Log"; $clearLogButton.Dock = "Right"
+$clearLogButton.AutoSize = $true; $clearLogButton.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $clearLogButton.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+
+$closeButtonMain = New-Object System.Windows.Forms.Button; $closeButtonMain.Text = "Fechar"; $closeButtonMain.Dock = "Right"
+$closeButtonMain.AutoSize = $true; $closeButtonMain.AutoSizeMode = [System.Windows.Forms.AutoSizeMode]::GrowAndShrink; $closeButtonMain.Padding = New-Object System.Windows.Forms.Padding(10,0,10,0)
+
+# O restante do código do timer/label permanece igual...
 $shutdownLabel = New-Object System.Windows.Forms.Label
 $shutdownLabel.Name = 'shutdownLabel' # Damos um nome para encontra-lo depois
 $shutdownLabel.Text = "15:00"
@@ -2987,18 +3475,28 @@ $cleanChocoCacheButton.Add_Click({
 })
 
 # Evento para o timer que dispara as analises iniciais assim que a UI e exibida
+$script:hasInitialized = $false
+
 $script:initialScanTimer.Add_Tick({
-    $script:initialScanTimer.Stop()
+    # 1. Tenta parar o timer usando o próprio objeto emissor ($this) para garantir
+    $this.Stop()
+    
+    # 2. Trava de Segurança: Se já rodou, cancela e sai imediatamente.
+    if ($script:hasInitialized) { return }
+    $script:hasInitialized = $true
+
     try {
-        Update-Status "Analisando status dos aplicativos nativos..."
+        # Como ajustamos as funcoes, agora elas sao rapidas (apenas leitura local)
+        Update-Status "Carregando lista de aplicativos nativos..."
         Analyze-Bloatware
-        Update-Status "Verificando atualizacoes de aplicativos (Chocolatey)..."
-        Scan-OutdatedChocoApps
-        Update-Status "Verificando todos os aplicativos instalados (Registro)..."
-        Run-Task "Verificar Todos os Aplicativos Instalados (Registro)" { Update-RegisteredAppsList }
-        Update-Status "Atualizando status de instalacao na arvore de softwares..."
+              
+        Update-Status "Carregando lista de programas instalados..."
+        Run-Task "Listar Aplicativos" { Update-RegisteredAppsList }
+        
+        Update-Status "Atualizando arvore de softwares..."
         Populate-AppsTreeView
-        Update-Status "Analises iniciais concluidas."
+        
+        Update-Status "Inicializacao concluida."
     } catch {
         Update-Status "ERRO durante a analise inicial: $($_.Exception.Message)"
     }
@@ -3007,7 +3505,13 @@ $script:initialScanTimer.Add_Tick({
 # --- LOGICA DO TEMPORIZADOR DE INATIVIDADE ---
 $script:shutdownTimer.Interval = 1000 # O timer dispara a cada 1 segundo
 $script:shutdownTimer.Add_Tick({
-    $script:shutdownSecondsRemaining--
+    
+	if ($script:executionJob -ne $null -and $script:executionJob.State -eq 'Running') {
+        $script:shutdownSecondsRemaining = 15 * 60
+        return
+    }
+	
+	$script:shutdownSecondsRemaining--
     $timespan = [TimeSpan]::FromSeconds($script:shutdownSecondsRemaining)
     # Usamos o .Find para garantir que o controle seja encontrado mesmo apos a criacao do form
     $shutdownLabel = $form.Controls.Find('shutdownLabel', $true)[0]
@@ -3087,23 +3591,20 @@ $script:progressTimer.Add_Tick({
         }
         $script:controlsToToggle.ForEach({ if ($_.IsHandleCreated) { $_.Enabled = $true } })
 
-		Refresh-AppLists
-
-        Update-Status "Execucao finalizada. Atualizando listas de aplicativos..."
+        # --- ALTERAÇÃO: REMOVIDAS AS CHAMADAS AUTOMÁTICAS DE REFRESH ---
+        # O script não vai mais buscar atualizações do Choco/Registro automaticamente ao fim de cada tarefa.
+        # O usuário deve usar os botões "Scanner" nas abas se quiser atualizar as listas.
         
-        # Dispara as atualizacoes. Usamos Run-Task para manter o log consistente.
-        Run-Task "Atualizando lista de apps desatualizados (Choco)" { Scan-OutdatedChocoApps }
-        Run-Task "Atualizando lista de todos os apps (Registro)" { Scan-RegistryApps }
-        Run-Task "Atualizando status na arvore de softwares" { Populate-AppsTreeView }
+        # Reinicia e retoma o temporizador de inatividade
+        Update-Status "Reiniciando temporizador de inatividade..."
+        $resetShutdownTimer.Invoke() # Reseta a contagem para 15:00
+        $script:shutdownTimer.Start() # Retoma o timer
         
-        Update-Status "Listas de aplicativos atualizadas."
-		
-		# Reinicia e retoma o temporizador de inatividade
-		Update-Status "Reiniciando temporizador de inatividade..."
-		$resetShutdownTimer.Invoke() # Reseta a contagem para 15:00
-		$script:shutdownTimer.Start() # Retoma o timer
-        
-				if ($anyTaskFailed) { Update-Status "Execucao concluida com uma ou mais falhas." } else { Update-Status "Execucao concluida com sucesso." }
+        if ($anyTaskFailed) { 
+            Update-Status "Execucao concluida com uma ou mais falhas." 
+        } else { 
+            Update-Status "Execucao concluida com sucesso." 
+        }
 
         if ($script:dismRepairSuggested) {
             [System.Windows.Forms.MessageBox]::Show("O Windows nao encontrou os arquivos para instalar/alterar um ou mais recursos.`n`nRecomenda-se executar 'Reparar Imagem do Windows (DISM)' e 'Verificar Integridade do Sistema (SFC)'.", "Sugestao de Reparo", "OK", "Information")
